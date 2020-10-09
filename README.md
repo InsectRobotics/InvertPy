@@ -1,2 +1,2 @@
 # InvertCentralComplex
-Brain package for the Invertebrate Central Complex (CX) brain region.
+Brain package for the Invertebrate Research Project.
