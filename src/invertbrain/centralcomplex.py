@@ -1,5 +1,5 @@
-from network_base import Network
-from utils import RNG
+from .network_base import Component
+from ._utils import RNG
 
 from scipy.special import expit
 
@@ -8,7 +8,7 @@ import yaml
 import os
 
 # get path of the script
-__root__ = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+__root__ = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.."))
 
 GAIN = 1 / 20
 N_COLUMNS = 8
@@ -18,7 +18,7 @@ with open(os.path.join(__root__, 'data', 'cx.yaml'), 'rb') as f:
     params = yaml.safe_load(f)
 
 
-class CX(Network):
+class CX(Component):
 
     def __init__(self, tn_prefs=np.pi/4, gain=GAIN, noise=.0, pontin=False, **kwargs):
 
