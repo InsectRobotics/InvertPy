@@ -11,8 +11,17 @@ def init_synapses(nb_in, nb_out, fill_value=0, dtype='float32', bias=None):
         return w, np.full(nb_out, fill_value=bias, dtype=dtype)
 
 
-def diagonal_synapses(nb_in, nb_out, fill_value=1, dtype='float32', bias=None):
-    w = fill_value * np.eye(nb_in, nb_out, dtype=dtype)
+def diagonal_synapses(nb_in, nb_out, fill_value=1, tile=False, dtype='float32', bias=None):
+    w = None
+    if tile:
+        if nb_in // nb_out > 1:
+            w = fill_value * np.tile(np.eye(nb_out, dtype=dtype), (nb_in//nb_out, 1))
+        elif nb_out // nb_in > 1:
+            w = fill_value * np.tile(np.eye(nb_in, dtype=dtype), (1, nb_out//nb_in))
+        else:
+            tile = False
+    if not tile:
+        w = fill_value * np.eye(nb_in, nb_out, dtype=dtype)
     if bias is None:
         return w
     else:
@@ -56,6 +65,36 @@ def opposing_synapses(nb_in, nb_out, fill_value=1., dtype='float32', bias=None):
         return w
     else:
         return w, np.full(nb_out, fill_value=bias, dtype=dtype)
+
+
+def sinusoidal_synapses(nb_in, nb_out, fill_value=1., dtype='float32', bias=None):
+    w = np.zeros((nb_in, nb_out), dtype=dtype)
+    sinusoid = fill_value * (-np.cos(np.linspace(0, 2 * np.pi, nb_out, endpoint=False)) + 1) / 2
+    for i in range(nb_in):
+        w[i, :] = np.roll(sinusoid, i)
+    if bias is None:
+        return w
+    else:
+        return w, np.full(nb_out, fill_value=bias, dtype=dtype)
+
+
+def chessboard_synapses(nb_in, nb_out, fill_value=1., nb_rows=2, nb_cols=2, dtype='float32', bias=None):
+    pattern = np.array([[(i % 2 == 0) == (j % 2 == 0) for j in range(nb_cols)] for i in range(nb_rows)], dtype=dtype)
+    if nb_out // nb_in > 1:
+        patch = np.full((1, nb_out // nb_in), fill_value=fill_value, dtype=dtype)
+    elif nb_in // nb_out > 1:
+        patch = np.full((nb_in // nb_out, 1), fill_value=fill_value, dtype=dtype)
+    else:
+        patch = np.full((1, 1), fill_value=fill_value, dtype=dtype)
+    return pattern_synapses(pattern, patch, dtype=dtype, bias=bias)
+
+
+def pattern_synapses(pattern, patch, dtype='float32', bias=None):
+    w = np.kron(pattern, patch)
+    if bias is None:
+        return w
+    else:
+        return w, np.full(w.shape[1], fill_value=bias, dtype=dtype)
 
 
 def roll_synapses(w, left=None, right=None, up=None, down=None):
