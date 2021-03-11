@@ -1,6 +1,7 @@
 from .network_base import Component
 from .synapses import *
-from ._utils import sigmoid
+from .activation import sigmoid
+from .cx_helpers import tn_axes
 
 import numpy as np
 import yaml
@@ -119,7 +120,7 @@ class CentralComplex(Component):
         self.f_cpu1 = lambda v: sigmoid(v * self._cpu1_slope - self.b_cpu1, noise=self.noise, rng=self.rng)
 
     def reset(self):
-        super(CentralComplex, self).reset()
+        super().reset()
 
         # Weight matrices based on anatomy (These are not changeable!)
         self.w_tl22cl1 = diagonal_synapses(self.nb_tl2, self.nb_cl1, fill_value=-1, dtype=self.dtype)
@@ -172,6 +173,11 @@ class CentralComplex(Component):
             compass, flow, tl2=tl2, cl1=cl1
         )
         return self.cpu1
+
+    def __repr__(self):
+        return "CentralComplex(TB1=%d, TN1=%d, TN2=%d, CL1=%d, TL2=%d, CPU4=%d, CPU1=%d)" % (
+            self.nb_tb1, self.nb_tn1, self.nb_tn2, self.nb_cl1, self.nb_tl2, self.nb_cpu4, self.nb_cpu1
+        )
 
     def _fprop(self, phi, flow, tl2=None, cl1=None):
         if isinstance(phi, np.ndarray) and phi.size == 8:
@@ -509,106 +515,3 @@ class CentralComplex(Component):
     @property
     def nb_cpu1(self):
         return self._nb_cpu1a + self._nb_cpu1b
-
-
-def get_steering(cx: CentralComplex) -> float:
-    """
-    Outputs a scalar where sign determines left or right turn.
-
-    Parameters
-    ----------
-    cx
-
-    Returns
-    -------
-
-    """
-
-    cpu1a = cx.cpu1[1:-1]
-    cpu1b = np.array([cx.cpu1[-1], cx.cpu1[0]])
-    motor = cpu1a @ cx.w_cpu1a2motor + cpu1b @ cx.w_cpu1b2motor
-    output = motor[0] - motor[1]  # * .25  # to kill the noise a bit!
-    return output
-
-
-def image_motion_flow(velocity, v_heading, r_sensor):
-    """
-    :param velocity: translation (velocity - 3D)
-    :type velocity: np.ndarray
-    :param v_heading: agent heading direction (3D vector)
-    :type v_heading: np.ndarray
-    :param r_sensor: relative directions of sensors on the agent (3D vectors)
-    :type r_sensor: np.ndarray
-    Calculate optic flow based on movement.
-    """
-    flow = velocity - (r_sensor.T * velocity.dot(r_sensor.T)).T
-    flow -= rotary_flow(v_heading, r_sensor)
-    return flow
-
-
-def rotary_flow(v_heading, r_sensor):
-    """
-    Clockwise rotation
-    :param v_heading: agent heading direction (3D vector)
-    :type v_heading: np.ndarray
-    :param r_sensor: relative directions of sensors on the agent (3D vectors)
-    :type r_sensor: np.ndarray
-    :return:
-    """
-    return np.cross(v_heading, r_sensor)
-
-
-def translatory_flow(r_sensor, r_pref):
-    """
-    :param r_sensor: relative directions of sensors on the agent (3D vectors)
-    :type r_sensor: np.ndarray
-    :param r_pref: agent's preferred direction
-    :type r_pref: np.ndarray
-    :return:
-    """
-    return np.cross(np.cross(r_sensor, r_pref), r_sensor)
-
-
-def linear_range_model(t_flow, r_flow, w=1., n=0.):
-    """
-    Eq 5 in Franz & Krapp
-    :param t_flow: translatory flow (wrt preferred direction)
-    :type t_flow: np.ndarray
-    :param r_flow: image motion flow
-    :type r_flow: np.ndarray
-    :param w: weight
-    :type w: float
-    :param n: noise
-    :type n: float
-    :return:
-    """
-    return w * ((t_flow * r_flow).sum(axis=1) + n).sum()
-
-
-def tn_axes(heading, tn_prefs=np.pi/4):
-    return np.array([[np.sin(heading - tn_prefs), np.cos(heading - tn_prefs)],
-                     [np.sin(heading + tn_prefs), np.cos(heading + tn_prefs)]])
-
-
-def get_flow(heading, velocity, r_sensors):
-    """
-    This is the longwinded version that does all the flow calculations,
-    piece by piece. It can be refactored down to flow2() so use that for
-    performance benefit.
-    """
-    translation = np.append(velocity, np.zeros(1))
-    rotation = np.zeros(3)
-    img_flow = image_motion_flow(translation, rotation, r_sensors)
-    tn_pref = tn_axes(heading)
-
-    flow_tn_1 = translatory_flow(r_sensors, tn_pref[0])
-    flow_tn_2 = translatory_flow(r_sensors, tn_pref[1])
-
-    lr_1 = linear_range_model(flow_tn_1, img_flow, w=.1)
-    lr_2 = linear_range_model(flow_tn_2, img_flow, w=.1)
-
-    return np.array([lr_1, lr_2])
-
-
-if __name__ == '__main__':
-    print(CentralComplex())

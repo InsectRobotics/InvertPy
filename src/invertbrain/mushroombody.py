@@ -1,7 +1,7 @@
 from .network_base import Component
 from .plasticity import dopaminergic, anti_hebbian
 from .synapses import init_synapses, diagonal_synapses, sparse_synapses, opposing_synapses, roll_synapses
-from ._utils import relu
+from .activation import relu
 
 import numpy as np
 
