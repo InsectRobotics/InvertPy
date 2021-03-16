@@ -1,6 +1,5 @@
 from .sensor import Sensor
-from ._helpers import fibonacci_sphere
-from ._helpers import eps
+from ._helpers import fibonacci_sphere, eps
 
 from scipy.spatial.transform import Rotation as R
 from copy import copy
@@ -84,6 +83,8 @@ class CompoundEye(Sensor):
             c_sensitive = np.array([[0, 0, .4, .1, .5]] * self._nb_input, dtype=self.dtype)
         if not isinstance(c_sensitive, np.ndarray):
             c_sensitive = np.array(c_sensitive, dtype=self.dtype)
+        if c_sensitive.ndim < 2:
+            c_sensitive = c_sensitive[np.newaxis, ...]
         c_sensitive /= np.maximum(c_sensitive.sum(axis=1), eps)[..., np.newaxis]
 
         self._omm_ori = omm_ori
@@ -165,8 +166,11 @@ class CompoundEye(Sensor):
         nb_gau = len(self._omm_ori_gau)
         w_gau = [1.] + [self._w_gau] * nb_gau
 
+        # increase brightness due to wider acceptance angle
+        brightness = np.sqrt(1 + 4 * self._omm_rho / np.pi)
+
         y_masked = np.ma.masked_array(y, np.isnan(y))
-        y0 = np.ma.average(y_masked, axis=0, weights=w_gau)
+        y0 = np.ma.average(y_masked, axis=0, weights=w_gau) * brightness
 
         p_masked = np.ma.masked_array(p, np.isnan(p))
         p0 = np.ma.average(p_masked, axis=0, weights=w_gau)
@@ -192,10 +196,6 @@ class CompoundEye(Sensor):
                    np.square(np.cos(a0 - pol_main + ori_op)) * np.square(1. - p0)) * op +
                   (1. - op))
         r = np.sqrt(s)
-
-        # r_op = np.sum(np.cos(2 * ori_op) * r, axis=1).reshape((-1, 1))
-        # r_po = np.sum(r, axis=1).reshape((-1, 1))
-        # r_pol = r_op / (r_po + eps)
 
         return r
 
