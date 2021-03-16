@@ -18,6 +18,9 @@ def save_eye2csv(eye, filename: str = None):
     rho = eye.omm_rho.reshape((-1, 1))
     pol = eye.omm_pol.reshape((-1, 1))
     hue = eye.hue_sensitive
+    if hue.shape[0] == 1:
+        hue = np.vstack([hue] * xyz.shape[0])
+
     data = np.hstack([xyz, q, rho, pol, hue])
 
     np.savetxt(fall, data, delimiter=',')

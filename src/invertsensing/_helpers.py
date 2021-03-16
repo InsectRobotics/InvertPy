@@ -27,22 +27,3 @@ def fibonacci_sphere(samples, fov):
     phis = (phi * indices) % (2 * np.pi)
 
     return np.vstack([phis, thetas, np.ones_like(phis)]).T
-
-
-def add_noise(v=None, noise=0., fill_value=0, rng=RNG):
-    if isinstance(noise, np.ndarray):
-        if noise.size == v.size:
-            eta = np.array(noise, dtype=bool)
-        else:
-            eta = np.zeros_like(v, dtype=bool)
-            eta[:noise.size] = noise
-    elif noise > 0:
-        eta = np.argsort(np.absolute(rng.random.randn(*v.shape)))[:int(noise * v.shape[0])]
-    else:
-        eta = np.zeros_like(v, dtype=bool)
-
-    if v is not None:
-        v[eta] = fill_value
-
-    return eta
-
