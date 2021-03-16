@@ -1,4 +1,4 @@
-from ._utils import RNG
+from ._helpers import RNG
 
 from scipy.special import expit
 

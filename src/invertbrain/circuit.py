@@ -1,5 +1,5 @@
 from .plasticity import dopaminergic
-from ._utils import RNG
+from ._helpers import RNG
 
 import numpy as np
 import warnings
@@ -29,13 +29,19 @@ class Component(object):
             self.__eta = repeat_learning_rate
 
     def reset(self):
-        self.__update = False
+        raise NotImplementedError()
+
+    def _fprop(self, *args, **kwargs):
+        raise NotImplementedError()
 
     def __call__(self, *args, **kwargs):
-        if 'callback' in kwargs.keys():
-            kwargs['callback'](self)
+        callback = kwargs.pop('callback', None)
+        out = self._fprop(*args, **kwargs)
 
-        return np.zeros(self._nb_output)
+        if callback is not None:
+            callback(self)
+
+        return out
 
     def __repr__(self):
         return "Component(in=%d, out=%d, lr='%s')" % (self._nb_input, self._nb_output, self.learning_rule)

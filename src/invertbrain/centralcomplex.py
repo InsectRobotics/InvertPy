@@ -1,4 +1,4 @@
-from .network_base import Component
+from .circuit import Component
 from .synapses import *
 from .activation import sigmoid
 from .cx_helpers import tn_axes
@@ -22,12 +22,14 @@ class CentralComplex(Component):
     def __init__(self, nb_tb1=8, nb_tn1=2, nb_tn2=2, nb_cl1=16, nb_tl2=16, nb_cpu4=16, nb_cpu1a=14, nb_cpu1b=2,
                  tn_prefs=np.pi/4, gain=0.05, noise=.0, pontin=False, *args, **kwargs):
 
+        kwargs.setdefault('nb_input', nb_tb1 + nb_tn1 + nb_tn2)
+        kwargs.setdefault('nb_output', nb_cpu1a + nb_cpu1b)
+        kwargs.setdefault('learning_rule', None)
+        super(CentralComplex, self).__init__(*args, **kwargs)
+
         if pontin:
             gain *= 5e-03
         self._gain = gain
-        kwargs.setdefault('nb_input', nb_tb1 + nb_tn1 + nb_tn2)
-        kwargs.setdefault('nb_output', nb_cpu1a + nb_cpu1b)
-        super(CentralComplex, self).__init__(*args, **kwargs)
 
         self.tn_prefs = tn_prefs
         self.smoothed_flow = 0.
@@ -119,6 +121,8 @@ class CentralComplex(Component):
         self.f_pontin = lambda v: sigmoid(v * self._pontin_slope - self.b_pontin, noise=self.noise, rng=self.rng)
         self.f_cpu1 = lambda v: sigmoid(v * self._cpu1_slope - self.b_cpu1, noise=self.noise, rng=self.rng)
 
+        self.reset()
+
     def reset(self):
         super().reset()
 
@@ -161,43 +165,25 @@ class CentralComplex(Component):
 
         self.update = True
 
-    def __call__(self, *args, **kwargs):
-        compass, flow = args[:2]
-        tl2 = kwargs.get("tl2", None)
-        cl1 = kwargs.get("cl1", None)
-        if tl2 is None and len(args) > 2:
-            tl2 = args[2]
-        if cl1 is None and len(args) > 3:
-            cl1 = args[3]
-        self.tl2, self.cl1, self.tb1, self.tn1, self.tn2, self.cpu4, self.cpu1 = self._fprop(
-            compass, flow, tl2=tl2, cl1=cl1
-        )
-        return self.cpu1
-
-    def __repr__(self):
-        return "CentralComplex(TB1=%d, TN1=%d, TN2=%d, CL1=%d, TL2=%d, CPU4=%d, CPU1=%d)" % (
-            self.nb_tb1, self.nb_tn1, self.nb_tn2, self.nb_cl1, self.nb_tl2, self.nb_cpu4, self.nb_cpu1
-        )
-
     def _fprop(self, phi, flow, tl2=None, cl1=None):
         if isinstance(phi, np.ndarray) and phi.size == 8:
             if tl2 is None:
                 tl2 = np.tile(phi, 2)
             if cl1 is None:
                 cl1 = np.tile(phi, 2)
-            a_tl2 = self.f_tl2(tl2[::-1])
-            a_cl1 = self.f_cl1(cl1[::-1])
-            a_tb1 = self.f_tb1(5. * phi[::-1])
+            self._tl2 = a_tl2 = self.f_tl2(tl2[::-1])
+            self._cl1 = a_cl1 = self.f_cl1(cl1[::-1])
+            self._tb1 = a_tb1 = self.f_tb1(5. * phi[::-1])
         else:
-            a_tl2 = self.f_tl2(self.phi2tl2(phi))
-            a_cl1 = self.f_cl1(a_tl2 @ self.w_tl22cl1)
+            self._tl2 = a_tl2 = self.f_tl2(self.phi2tl2(phi))
+            self._cl1 = a_cl1 = self.f_cl1(a_tl2 @ self.w_tl22cl1)
             if self.tb1 is None:
-                a_tb1 = self.f_tb1(a_cl1)
+                self._tb1 = a_tb1 = self.f_tb1(a_cl1)
             else:
                 p = .667  # proportion of input from CL1 to TB1
-                a_tb1 = self.f_tb1(p * a_cl1 @ self.w_cl12tb1 + (1 - p) * self.tb1 @ self.w_tb12tb1)
-        a_tn1 = self.flow2tn1(flow)
-        a_tn2 = self.flow2tn2(flow)
+                self._tb1 = a_tb1 = self.f_tb1(p * a_cl1 @ self.w_cl12tb1 + (1 - p) * self.tb1 @ self.w_tb12tb1)
+        self._tn1 = a_tn1 = self.flow2tn1(flow)
+        self._tn2 = a_tn2 = self.flow2tn2(flow)
 
         if self.pontin:
             mem = .5 * self._gain * (np.clip(a_tn2 @ self.w_tn22cpu4 - a_tb1 @ self.w_tb12cpu4, 0, 1) - .25)
@@ -221,7 +207,7 @@ class CentralComplex(Component):
         if self.update:
             self.__cpu4 = cpu4_mem
 
-        a_cpu4 = self.f_cpu4(cpu4_mem)
+        self._cpu4 = a_cpu4 = self.f_cpu4(cpu4_mem)
 
         if self.pontin:
             a_pontin = self.f_pontin(a_cpu4 @ self.w_cpu42pontin)
@@ -231,9 +217,14 @@ class CentralComplex(Component):
             cpu1a = (a_cpu4 @ self.w_cpu42cpu1a) * ((a_tb1 - 1.) @ self.w_tb12cpu1a)
             cpu1b = (a_cpu4 @ self.w_cpu42cpu1b) * ((a_tb1 - 1.) @ self.w_tb12cpu1b)
 
-        a_cpu1 = self.f_cpu1(np.hstack([cpu1b[-1], cpu1a, cpu1b[0]]))
+        self._cpu1 = a_cpu1 = self.f_cpu1(np.hstack([cpu1b[-1], cpu1a, cpu1b[0]]))
 
-        return a_tl2, a_cl1, a_tb1, a_tn1, a_tn2, a_cpu4, a_cpu1
+        return a_cpu1
+
+    def __repr__(self):
+        return "CentralComplex(TB1=%d, TN1=%d, TN2=%d, CL1=%d, TL2=%d, CPU4=%d, CPU1=%d)" % (
+            self.nb_tb1, self.nb_tn1, self.nb_tn2, self.nb_cl1, self.nb_tl2, self.nb_cpu4, self.nb_cpu1
+        )
 
     def get_flow(self, heading, velocity, filter_steps=0):
         """

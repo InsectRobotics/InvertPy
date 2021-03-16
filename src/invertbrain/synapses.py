@@ -1,4 +1,4 @@
-from ._utils import RNG
+from ._helpers import RNG
 
 import numpy as np
 
@@ -110,3 +110,7 @@ def roll_synapses(w, left=None, right=None, up=None, down=None):
         w = np.vstack([w[-int(right):, :], w[:-int(right), :]])
 
     return w
+
+
+def gaussian_blurring(nb_in, nb_out, fill_value=1., dtype='float32', bias=None):
+    pass

@@ -1,4 +1,4 @@
-from .network_base import Component
+from .circuit import Component
 from .plasticity import dopaminergic, anti_hebbian
 from .synapses import init_synapses, diagonal_synapses, sparse_synapses, opposing_synapses, roll_synapses
 from .activation import relu
@@ -121,7 +121,21 @@ class MushroomBody(Component):
         else:
             return None
 
-    def _fprop(self, cs: np.ndarray, us: np.ndarray, kc: np.ndarray, apl: np.ndarray, dan: np.ndarray, mbon: np.ndarray,
+    def _fprop(self, cs: np.ndarray = None, us: np.ndarray = None):
+        if cs is None:
+            cs = np.zeros_like(self._cs)
+        if us is None:
+            us = np.zeros_like(self._us)
+
+        for r in range(self.repeats):
+            self._kc[-r-1], self._apl[-r-1], self._dan[-r-1], self._mbon[-r-1] = self._rprop(
+                cs, us, self.r_kc[-r], self.r_apl[-r], self.r_dan[-r], self.r_mbon[-r], v_update=r > 0)
+            self._cs[-r-1] = cs
+            self._us[-r-1] = us
+
+        return self._mbon[0]
+
+    def _rprop(self, cs: np.ndarray, us: np.ndarray, kc: np.ndarray, apl: np.ndarray, dan: np.ndarray, mbon: np.ndarray,
                v_update=True):
         _kc = kc @ self.w_k2k if self.w_k2k is not None else 0.
         _kc += cs @ self.w_c2k + apl @ self.w_a2k + self.b_k
@@ -144,27 +158,6 @@ class MushroomBody(Component):
             self.w_k2m = np.maximum(self.update_weights(self.w_k2m, a_kc, a_mbon, D, w_rest=self.w_rest), 0)
 
         return a_kc, a_apl, a_dan, a_mbon
-
-    def __call__(self, *args, **kwargs):
-        if len(args) > 0:
-            cs = args[0]
-        else:
-            cs = kwargs.get('cs', np.zeros_like(self._cs))
-        if len(args) > 1:
-            us = args[1]
-        else:
-            us = kwargs.get('us', np.zeros_like(self._us))
-
-        for r in range(self.repeats):
-            self._kc[-r-1], self._apl[-r-1], self._dan[-r-1], self._mbon[-r-1] = self._fprop(
-                cs, us, self.r_kc[-r], self.r_apl[-r], self.r_dan[-r], self.r_mbon[-r], v_update=r > 0)
-            self._cs[-r-1] = cs
-            self._us[-r-1] = us
-
-        if 'callback' in kwargs.keys() and callable(kwargs['callback']):
-            kwargs['callback'](self)
-
-        return self._mbon[0]
 
     def __repr__(self):
         return "MushroomBody(CS=%d, US=%d, KC=%d, APL=%d, DAN=%d, MBON=%d, sparseness=%0.3f, plasticity='%s')" % (
@@ -516,8 +509,8 @@ class SusceptibleMemory(IncentiveCircuit):
 
         self._mbon[0] = self.b_m.copy()
 
-    def __call__(self, *args, **kwargs):
-        mbons = super().__call__(*args, **kwargs)
+    def _fprop(self, *args, **kwargs):
+        mbons = super()._fprop(*args, **kwargs)
         return mbons[:2]
 
     def __repr__(self):
@@ -550,8 +543,8 @@ class RestrainedMemory(IncentiveCircuit):
 
         self._mbon[0] = self.b_m.copy()
 
-    def __call__(self, *args, **kwargs):
-        mbons = super().__call__(*args, **kwargs)
+    def _fprop(self, *args, **kwargs):
+        mbons = super()._fprop(*args, **kwargs)
         return mbons[:4]
 
     def __repr__(self):
@@ -584,8 +577,8 @@ class LongTermMemory(IncentiveCircuit):
 
         self._mbon[0] = self.b_m.copy()
 
-    def __call__(self, *args, **kwargs):
-        mbons = super().__call__(*args, **kwargs)
+    def _fprop(self, *args, **kwargs):
+        mbons = super()._fprop(*args, **kwargs)
         return mbons[4:6]
 
     def __repr__(self):
@@ -618,8 +611,8 @@ class ReciprocalRestrainedMemories(IncentiveCircuit):
 
         self._mbon[0] = self.b_m.copy()
 
-    def __call__(self, *args, **kwargs):
-        mbons = super().__call__(*args, **kwargs)
+    def _fprop(self, *args, **kwargs):
+        mbons = super()._fprop(*args, **kwargs)
         return mbons[2:4]
 
     def __repr__(self):
@@ -652,8 +645,8 @@ class ReciprocalForgettingMemories(IncentiveCircuit):
 
         self._mbon[0] = self.b_m.copy()
 
-    def __call__(self, *args, **kwargs):
-        mbons = super().__call__(*args, **kwargs)
+    def _fprop(self, *args, **kwargs):
+        mbons = super()._fprop(*args, **kwargs)
         return mbons[4:6]
 
     def __repr__(self):
@@ -687,8 +680,8 @@ class MemoryAssimilationMechanism(IncentiveCircuit):
 
         self._mbon[0] = self.b_m.copy()
 
-    def __call__(self, *args, **kwargs):
-        mbons = super().__call__(*args, **kwargs)
+    def _fprop(self, *args, **kwargs):
+        mbons = super()._fprop(*args, **kwargs)
         return mbons[2:6]
 
     def __repr__(self):
