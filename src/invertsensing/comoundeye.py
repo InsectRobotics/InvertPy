@@ -1,3 +1,14 @@
+__author__ = "Evripidis Gkanias"
+__copyright__ = "Copyright (c) 2021, Insect Robotics Group," \
+                "Institude of Perception, Action and Behaviour," \
+                "School of Informatics, the University of Edinburgh"
+__credits__ = ["Evripidis Gkanias"]
+__license__ = "MIT"
+__version__ = "1.0.1"
+__maintainer__ = "Evripidis Gkanias"
+
+
+from invertbrain.activation import softmax
 from .sensor import Sensor
 from ._helpers import fibonacci_sphere, eps
 
@@ -150,12 +161,12 @@ class CompoundEye(Sensor):
 
         if scene is not None:
             omm_pos_glob = self.xyz + self._ori.apply(self._omm_xyz)
-            c[0] = np.sum(scene(omm_pos_glob, ori=omm_ori_glob,
-                                brightness=br, noise=self.noise) * w_c[..., 1:4], axis=1)
+            c[0] = 1 - np.sum(scene(omm_pos_glob, ori=omm_ori_glob,
+                                    brightness=br, noise=self.noise) * w_c[..., 1:4], axis=1)
 
             for i, omm_ori_gau_glob in enumerate(omm_oris_gau_glob):
-                c[i+1] = np.sum(scene(omm_pos_glob, ori=omm_ori_gau_glob,
-                                      brightness=br, noise=self.noise) * w_c[..., 1:4], axis=1)
+                c[i+1] = 1 - np.sum(scene(omm_pos_glob, ori=omm_ori_gau_glob,
+                                          brightness=br, noise=self.noise) * w_c[..., 1:4], axis=1)
 
         # add the contribution of the scene to the input from the sky
         y[~np.isnan(c)] = c[~np.isnan(c)]
@@ -167,7 +178,7 @@ class CompoundEye(Sensor):
         w_gau = [1.] + [self._w_gau] * nb_gau
 
         # increase brightness due to wider acceptance angle
-        brightness = np.sqrt(1 + 4 * self._omm_rho / np.pi)
+        brightness = np.sqrt(.5 + 4 * self._omm_rho / np.pi)
 
         y_masked = np.ma.masked_array(y, np.isnan(y))
         y0 = np.ma.average(y_masked, axis=0, weights=w_gau) * brightness
@@ -229,3 +240,35 @@ class CompoundEye(Sensor):
     @property
     def nb_ommatidia(self):
         return self._omm_xyz.shape[0]
+
+
+def mental_rotation_matrix(eye: CompoundEye, nb_rotates=8, dtype='float32'):
+
+    """
+    Builds a matrix (nb_om x nb_om x nb_out) that performs mental rotation of the visual input.
+    In practice, it builds a maps for each of the uniformly distributed nb_out view directions,
+    that allow internal rotation of the visual input for different orientations of interest (preference angles).
+    Parameters
+    ----------
+    eye: CompoundEye
+        The compound eye structure.
+    nb_rotates: int
+        The number of different tuning points (preference angles).
+    dtype: np.dtype, str
+        The type of the elements in the matrix
+    Returns
+    -------
+        A matrix that maps the input space of the eye to nb_out uniformly distributed
+    """
+    nb_omm = eye.nb_ommatidia
+    m = np.zeros((nb_omm, nb_omm, nb_rotates), dtype=dtype)
+    phi_rot = np.linspace(0, 2*np.pi, nb_rotates, endpoint=False)
+
+    for i in range(nb_rotates):
+        omm_i = R.from_euler('Z', phi_rot[i], degrees=False) * eye.omm_ori
+        for j in range(nb_omm):
+            omm_j = eye.omm_ori[j]
+            d = np.linalg.norm((omm_i.inv() * omm_j).apply([1, 0, 0]) - np.array([1, 0, 0])) / 2
+            m[j, :, i] = softmax(1. - d, tau=.01)
+
+    return m

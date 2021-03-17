@@ -1,5 +1,5 @@
+from invertbrain.compass import photoreceptor2pol
 from .comoundeye import CompoundEye
-from ._helpers import eps
 
 from scipy.spatial.transform import Rotation as R
 
@@ -38,15 +38,7 @@ class PolarisationCompass(CompoundEye):
 
     def _sense(self, sky=None, scene=None):
         r = super()._sense(sky=sky, scene=scene)
-
-        ori_op = np.zeros((np.shape(self._omm_ori)[0], 2), dtype=self.dtype)
-        ori_op[..., 1] = np.pi / 2
-
-        r_op = np.sum(np.cos(2 * ori_op) * r, axis=1).reshape((-1, 1))
-        r_po = np.sum(r, axis=1).reshape((-1, 1))
-        r_pol = r_op / (r_po + eps)
-
-        return r_pol
+        return photoreceptor2pol(r, ori=self._omm_ori, dtype=self.dtype).reshape((-1, 1))
 
     def __repr__(self):
         print(self._nb_output[1])
