@@ -1,4 +1,4 @@
-from invertsensing.comoundeye import CompoundEye
+from invertsensing.vision import CompoundEye
 from invertio.sensor_params import save_eye2csv, load_csv2eye
 
 import numpy as np

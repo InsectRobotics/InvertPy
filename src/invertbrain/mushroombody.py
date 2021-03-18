@@ -1,4 +1,4 @@
-from .circuit import Component
+from .component import Component
 from .plasticity import dopaminergic, anti_hebbian
 from .synapses import init_synapses, diagonal_synapses, sparse_synapses, opposing_synapses, roll_synapses
 from .activation import relu

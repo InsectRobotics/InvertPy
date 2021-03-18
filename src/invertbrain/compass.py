@@ -1,17 +1,21 @@
-from .circuit import Component
+from .component import Component
 from .synapses import init_synapses
 from ._helpers import eps
 
 from scipy.spatial.transform import Rotation as R
+from copy import copy
 
 import numpy as np
 
 
 class CelestialCompass(Component):
 
-    def __init__(self, nb_pol: int, nb_sol: int, nb_tcl: int, loc_ori: R, sigma=13, shift=40, dt=2./60, degrees=True,
-                 is_absolute=False, has_pol=True, has_sun=True, has_circadian=False, *args, **kwargs):
+    def __init__(self, nb_pol: int, loc_ori: R, nb_sol: int = 8, nb_tcl: int = None, sigma=13, shift=40, dt=2./60,
+                 degrees=True, integrated=False, has_pol=True, has_sun=True, has_circadian=False, *args, **kwargs):
         super().__init__(nb_pol, nb_tcl, *args, **kwargs)
+
+        if nb_tcl is None:
+            nb_tcl = nb_sol
 
         self._phi_sun = np.linspace(-np.pi, np.pi, nb_sol, endpoint=False)  # SUN preference angles
         self._phi_sol = np.linspace(0., 2 * np.pi, nb_sol, endpoint=False)  # SOL preference angles
@@ -19,7 +23,7 @@ class CelestialCompass(Component):
 
         self._w_sun = init_synapses(nb_pol, nb_sol, dtype=self.dtype)
         self._w_sol = init_synapses(nb_pol, nb_sol, dtype=self.dtype)
-        if is_absolute:
+        if integrated:
             self._w_tcl = init_synapses(nb_pol, nb_tcl, dtype=self.dtype)
         else:
             self._w_tcl = init_synapses(nb_sol, nb_tcl, dtype=self.dtype)
@@ -30,7 +34,7 @@ class CelestialCompass(Component):
 
         self._sigma = np.deg2rad(sigma) if degrees else sigma
         self._shift = np.deg2rad(shift) if degrees else shift
-        self._loc_ori = loc_ori
+        self._loc_ori = copy(loc_ori)
 
         self._r_pol = None
         self._r_sol = None
@@ -45,32 +49,39 @@ class CelestialCompass(Component):
         self._has_circadian = has_circadian
         self._has_pol = has_pol
         self._has_sun = has_sun
-        self._is_absolute = is_absolute
+        self._is_absolute = integrated
         self._d_phi = 0.
         self._dt = dt
 
         self.reset()
 
     def reset(self):
-        yaw, pitch, roll = self._loc_ori.as_euler('ZYX', degrees=False)
+        yaw, pitch, roll = self._loc_ori.as_euler('ZYX', degrees=False).T
 
         if self.has_pol:
             self.phi_sol = np.linspace(0., 2 * np.pi, self.nb_sol, endpoint=False)  # SOL preference angles
-            self.w_sol = self.generate_w_sol(roll)
+            self.w_sol = self.generate_w_sol(yaw+np.pi/2)
         if self.has_sun:
             self.phi_sun = np.linspace(-np.pi, np.pi, self.nb_sol, endpoint=False)  # SUN preference angles
-            self.w_sun = self.generate_w_sun(roll)
+            self.w_sun = self.generate_w_sun(yaw+np.pi/2)
 
         self.phi_tcl = np.linspace(0., 2 * np.pi, self.nb_tcl, endpoint=False)  # TCL preference angles
-        self.w_tcl = self.generate_w_tcl(roll)
+        self.w_tcl = self.generate_w_tcl(yaw+np.pi/2)
+
+        self._r_pol = np.zeros(self.nb_pol)
+        self._r_sol = np.zeros(self.nb_sol)
+        self._r_sun = np.zeros(self.nb_sol)
+        self._r_tcl = np.zeros(self.nb_tcl)
 
         self.update = self._has_circadian
 
     def _fprop(self, r_pol: np.ndarray = None, r: np.ndarray = None, glob_ori: R = None, ori: R = None):
         if self.has_pol and r_pol is None and r is not None:
-            r_pol = photoreceptor2pol(r, ori=self._loc_ori)
+            r_pol = photoreceptor2pol(r, ori=self._loc_ori).reshape(-1)
         elif r_pol is None:
             r_pol = np.zeros(self._nb_pol)
+        else:
+            r_pol = r_pol.reshape(-1)
 
         if self.has_sun and r is not None:
             r_sun = photoreceptor2pooling(r)
@@ -83,6 +94,7 @@ class CelestialCompass(Component):
             glob_ori = ori * self._loc_ori
 
         g = self.gate(glob_ori)
+
         r_cel = np.zeros(self.nb_sol, dtype=self.dtype)
         if self.has_pol:
             w_sol = self.w_sol * g
@@ -94,7 +106,7 @@ class CelestialCompass(Component):
             r_sun = r_sun @ w_sun
             r_cel += r_cel
             self._r_sun = r_sun
-        r_cel /= (float(self.has_pol) + float(self.has_sun))
+        # r_cel /= (float(self.has_pol) + float(self.has_sun))
 
         if self.update:
             d_phi = self.circadian(r_cel, self._dt)
@@ -102,11 +114,12 @@ class CelestialCompass(Component):
             self._d_phi += d_phi
             self.w_tcl = self.generate_w_tcl()
 
-        w_tcl = self.w_tcl * g
-
         if self._is_absolute:
+            w_tcl = self.w_tcl * g
+            # print(w_tcl)
             r_tcl = r_pol @ w_tcl
         else:
+            w_tcl = self.w_tcl
             r_tcl = r_cel @ w_tcl
 
         self._r_pol = r_pol
@@ -117,10 +130,10 @@ class CelestialCompass(Component):
 
     def gate(self, glob_ori: R, order=1.):
         _, pitch, _ = glob_ori.as_euler('ZYX', degrees=False).T
-        zenith = np.pi/2 - pitch
+        zenith = pitch - np.pi/2
         d = np.sin(self._shift - zenith)
 
-        return np.power(np.exp(-np.square(d) / (2. * np.square(self._sigma))), order)
+        return np.power(np.exp(-np.square(d) / (2. * np.square(self._sigma))), order).reshape((-1, 1))
 
     def circadian(self, r_sol, dt):
         r = r_sol @ np.exp(-np.arange(self.nb_tcl) * 1j * 2 * np.pi / float(self._nb_tcl))
@@ -147,7 +160,8 @@ class CelestialCompass(Component):
     def generate_w_tcl(self, alpha=None):
         if self._is_absolute:
             if alpha is None:
-                _, _, alpha = self._loc_ori.as_euler('ZYX', degrees=False)
+                alpha, _, _ = self._loc_ori.as_euler('ZYX', degrees=False)
+                alpha += np.pi/2
 
             z = float(self.nb_tcl) / (2. * float(self.nb_pol))
             return -z * np.sin(self._phi_tcl[np.newaxis] - alpha[:, np.newaxis])

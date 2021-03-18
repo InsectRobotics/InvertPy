@@ -1,13 +1,13 @@
 from invertbrain.compass import photoreceptor2pol
-from .comoundeye import CompoundEye
+from .vision import CompoundEye
 
 from scipy.spatial.transform import Rotation as R
 
 import numpy as np
 
 
-class PolarisationCompass(CompoundEye):
-    def __init__(self, field_of_view=56, *args, **kwargs):
+class PolarisationSensor(CompoundEye):
+    def __init__(self, field_of_view: float = 56, degrees=True, *args, **kwargs):
 
         kwargs.setdefault('nb_input', 60)
         nb_inputs = kwargs['nb_input']
@@ -24,7 +24,7 @@ class PolarisationCompass(CompoundEye):
         else:
             nb_samples = None
         if nb_samples is not None:
-            omm_sph = generate_rings(nb_samples=[4, 8, 12, 16, 20], fov=field_of_view)[..., :2]
+            omm_sph = generate_rings(nb_samples=[4, 8, 12, 16, 20], fov=field_of_view, degrees=degrees)[..., :2]
             omm_euler = np.hstack([omm_sph, np.full((omm_sph.shape[0], 1), np.pi / 2)])
             kwargs.setdefault('omm_ori', R.from_euler('ZYX', omm_euler, degrees=False))
         kwargs.setdefault('omm_rho', np.deg2rad(5.4))
@@ -53,9 +53,11 @@ class PolarisationCompass(CompoundEye):
         return self._field_of_view
 
 
-def generate_rings(nb_samples, fov):
+def generate_rings(nb_samples, fov, degrees=True):
     nb_rings = len(nb_samples)
     nb_samples_total = np.sum(nb_samples)
+    if not degrees:
+        fov = np.rad2deg(fov)
     v_angles = fov / float(2 * nb_rings + 1)
 
     phis = np.zeros(nb_samples_total, dtype='float32')
@@ -67,7 +69,7 @@ def generate_rings(nb_samples, fov):
         for c in range(samples):
             phi = c * h_angles + h_angles / 2
             phis[i] = np.deg2rad(phi)
-            thetas[i] = np.deg2rad(theta)
+            thetas[i] = np.deg2rad(-theta)
             i += 1
 
     return np.vstack([phis, thetas, np.ones_like(phis)]).T

@@ -14,8 +14,8 @@ def get_steering(cx) -> float:
 
     """
 
-    cpu1a = cx.cpu1[1:-1]
-    cpu1b = np.array([cx.cpu1[-1], cx.cpu1[0]])
+    cpu1a = cx.r_cpu1[1:-1]
+    cpu1b = np.array([cx.r_cpu1[-1], cx.r_cpu1[0]])
     motor = cpu1a @ cx.w_cpu1a2motor + cpu1b @ cx.w_cpu1b2motor
     output = motor[0] - motor[1]  # * .25  # to kill the noise a bit!
     return output

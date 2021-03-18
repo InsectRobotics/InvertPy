@@ -122,15 +122,6 @@ class CompoundEye(Sensor):
                 'XY', np.vstack([np.full_like(self._omm_rho, i*np.pi/3), self._omm_rho/2]).T)
             self._omm_ori_gau[i] = self._omm_ori * ori_p
 
-        # import matplotlib.pyplot as plt
-        #
-        # xyz_gau = np.zeros((6, nb_omm, 3), dtype=self.dtype)
-        # for i in range(6):
-        #     xyz_gau[i] = self._omm_ori_gau[i].apply([1, 0, 0])
-        #
-        # plt.plot(xyz_gau[..., 0], xyz_gau[..., 1])
-        # plt.show()
-
         self._ori = copy(self._ori_init)
 
     def _sense(self, sky=None, scene=None):
@@ -169,7 +160,7 @@ class CompoundEye(Sensor):
                                           brightness=br, noise=self.noise) * w_c[..., 1:4], axis=1)
 
         # add the contribution of the scene to the input from the sky
-        y[~np.isnan(c)] = c[~np.isnan(c)]
+        y[~np.isnan(c)] = c[~np.isnan(c)] * np.nanmin(y[np.isnan(c)]) / 2
         p[~np.isnan(c)] = 0.
         a[~np.isnan(c)] = 0.
 
@@ -208,11 +199,11 @@ class CompoundEye(Sensor):
                   (1. - op))
         r = np.sqrt(s)
 
-        return r
+        return np.array(r)
 
     def __repr__(self):
         return ("CompoundEye(ommatidia=%d, responses=(%d, %d), "
-                "pos=(%.2f, %.2f, %.2f), ori=(%.2f, %.2f, %.2f), name='%s')") % (
+                "pos=(%.2f, %.2f, %.2f), ori=(%.0f, %.0f, %.0f), name='%s')") % (
             self.nb_ommatidia, self._nb_output[0], self._nb_output[1],
             self.x, self.y, self.z, self.yaw_deg, self.pitch_deg, self.roll_deg, self.name
         )

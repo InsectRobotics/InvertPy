@@ -1,4 +1,4 @@
-from .circuit import Component
+from .component import Component
 from .synapses import *
 from .activation import sigmoid
 from .cx_helpers import tn_axes
@@ -124,8 +124,6 @@ class CentralComplex(Component):
         self.reset()
 
     def reset(self):
-        super().reset()
-
         # Weight matrices based on anatomy (These are not changeable!)
         self.w_tl22cl1 = diagonal_synapses(self.nb_tl2, self.nb_cl1, fill_value=-1, dtype=self.dtype)
         self.w_cl12tb1 = diagonal_synapses(self.nb_cl1, self.nb_tb1, fill_value=1, tile=True, dtype=self.dtype)
@@ -177,13 +175,15 @@ class CentralComplex(Component):
         else:
             self._tl2 = a_tl2 = self.f_tl2(self.phi2tl2(phi))
             self._cl1 = a_cl1 = self.f_cl1(a_tl2 @ self.w_tl22cl1)
-            if self.tb1 is None:
+            if self._tb1 is None:
                 self._tb1 = a_tb1 = self.f_tb1(a_cl1)
             else:
                 p = .667  # proportion of input from CL1 to TB1
-                self._tb1 = a_tb1 = self.f_tb1(p * a_cl1 @ self.w_cl12tb1 + (1 - p) * self.tb1 @ self.w_tb12tb1)
+                self._tb1 = a_tb1 = self.f_tb1(p * a_cl1 @ self.w_cl12tb1 + (1 - p) * self._tb1 @ self.w_tb12tb1)
         self._tn1 = a_tn1 = self.flow2tn1(flow)
         self._tn2 = a_tn2 = self.flow2tn2(flow)
+
+        # print(self._tb1)
 
         if self.pontin:
             mem = .5 * self._gain * (np.clip(a_tn2 @ self.w_tn22cpu4 - a_tb1 @ self.w_tb12cpu4, 0, 1) - .25)

@@ -36,6 +36,29 @@ class Sensor(object):
             self.yaw_deg, self.pitch_deg, self.roll_deg, self.name
         )
 
+    def rotate(self, d_ori, around_xyz=None):
+        """
+
+        Parameters
+        ----------
+        d_ori: R
+        around_xyz: np.ndarray, list
+        """
+        if around_xyz is None:
+            around_xyz = [0, 0, 0]
+        around_xyz = np.array(around_xyz)
+        self._xyz = around_xyz + d_ori.apply(self._xyz - around_xyz)
+        self._ori = self.ori * d_ori
+
+    def translate(self, d_xyz):
+        """
+
+        Parameters
+        ----------
+        d_xyz: np.ndarray, list
+        """
+        self._xyz += np.array(d_xyz)
+
     @property
     def xyz(self):
         return self._xyz
