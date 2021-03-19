@@ -123,11 +123,12 @@ class MushroomBody(Component):
 
     def _fprop(self, cs: np.ndarray = None, us: np.ndarray = None):
         if cs is None:
-            cs = np.zeros_like(self._cs)
+            cs = np.zeros_like(self._cs[0])
         if us is None:
-            us = np.zeros_like(self._us)
+            us = np.zeros_like(self._us[0])
 
         for r in range(self.repeats):
+
             self._kc[-r-1], self._apl[-r-1], self._dan[-r-1], self._mbon[-r-1] = self._rprop(
                 cs, us, self.r_kc[-r], self.r_apl[-r], self.r_dan[-r], self.r_mbon[-r], v_update=r > 0)
             self._cs[-r-1] = cs
@@ -343,6 +344,11 @@ class WillshawNetwork(MushroomBody):
         kwargs.setdefault('eligibility_trace', .1)
 
         super(WillshawNetwork, self).__init__(*args, **kwargs)
+
+        self.f_dan = lambda x: relu(x, cmax=2)
+        self.f_kc = lambda x: relu(3 * x - 1, cmax=2)
+        self.f_apl = lambda x: relu(x, cmax=2)
+        self.f_mbon = lambda x: relu(x / 4, cmax=2)
 
     def __repr__(self):
         return "IncentiveCircuit(PN=%d, KC=%d, EN=%d, eligibility_trace=%.2f, plasticity='%s')" % (

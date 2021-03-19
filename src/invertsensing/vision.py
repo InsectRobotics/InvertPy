@@ -20,7 +20,8 @@ import numpy as np
 
 class CompoundEye(Sensor):
 
-    def __init__(self, omm_xyz=None, omm_ori=None, omm_rho=None, omm_pol_op=None, c_sensitive=None, *args, **kwargs):
+    def __init__(self, omm_xyz=None, omm_ori=None, omm_rho=None, omm_pol_op=None, omm_res=None, c_sensitive=None,
+                 *args, **kwargs):
         """
 
         Parameters
@@ -35,6 +36,9 @@ class CompoundEye(Sensor):
         omm_rho: np.ndarray, float
             The acceptance angle of each ommatidium. If it is a single value, it is assigned to all the ommatidia.
             Default is 5 deg.
+        omm_res: np.ndarray, float
+            The responsivity of each ommatidium. If it is a single value, it is assigned to all the ommatidia.
+            Default is 1.
         omm_pol_op: np.ndarray, float
             The polarisation sensitivity of every ommatidium (0 = None, 1 = very sensitive). If it is a single value, it
             is assigned to all the ommatidia. Default is 0.
@@ -90,6 +94,11 @@ class CompoundEye(Sensor):
             omm_rho = np.full_like(omm_pol_op, np.deg2rad(5.))
         elif isinstance(omm_rho, float) or isinstance(omm_rho, int):
             omm_rho = np.full_like(omm_pol_op, omm_rho)
+        if omm_res is None:
+            omm_res = np.full_like(omm_rho, 1.)
+        elif isinstance(omm_res, float) or isinstance(omm_res, int):
+            omm_res = np.full_like(omm_rho, omm_res)
+
         if c_sensitive is None:
             c_sensitive = np.array([[0, 0, .4, .1, .5]] * self._nb_input, dtype=self.dtype)
         if not isinstance(c_sensitive, np.ndarray):
@@ -103,6 +112,8 @@ class CompoundEye(Sensor):
         self._omm_xyz = omm_xyz
         self._omm_pol = omm_pol_op
         self._omm_rho = omm_rho
+        self._omm_res = omm_res
+        self._omm_area = None
         self._w_o2r = None  # ommatidia to responses
         # contribution of each six points on the edges of the ommatidia
         # (sigma/2 distance from the centre of the Gaussian)
@@ -123,6 +134,10 @@ class CompoundEye(Sensor):
             self._omm_ori_gau[i] = self._omm_ori * ori_p
 
         self._ori = copy(self._ori_init)
+
+        # the small radius of each ommatidium (from the centre of the lens to the edges) in mm
+        r_l = np.linalg.norm(self._omm_ori_gau[0].apply([1, 0, 0]) - self._omm_ori.apply([1, 0, 0]), axis=1)
+        self._omm_area = np.pi * np.square(r_l)
 
     def _sense(self, sky=None, scene=None):
         w_c = self._c_sensitive
@@ -168,11 +183,10 @@ class CompoundEye(Sensor):
         nb_gau = len(self._omm_ori_gau)
         w_gau = [1.] + [self._w_gau] * nb_gau
 
-        # increase brightness due to wider acceptance angle
-        brightness = np.sqrt(.5 + 4 * self._omm_rho / np.pi)
-
+        # control the brightness due to wider acceptance angle
+        # area * responsivity * radiation
         y_masked = np.ma.masked_array(y, np.isnan(y))
-        y0 = np.ma.average(y_masked, axis=0, weights=w_gau) * brightness
+        y0 = np.ma.average(y_masked, axis=0, weights=w_gau) * self._omm_area * self._omm_res
 
         p_masked = np.ma.masked_array(p, np.isnan(p))
         p0 = np.ma.average(p_masked, axis=0, weights=w_gau)
@@ -223,6 +237,14 @@ class CompoundEye(Sensor):
     @property
     def omm_pol(self):
         return self._omm_pol
+
+    @property
+    def omm_area(self):
+        return self._omm_area
+
+    @property
+    def omm_responsivity(self):
+        return self._omm_res
 
     @property
     def hue_sensitive(self):
