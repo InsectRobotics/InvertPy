@@ -1,4 +1,4 @@
-from ._helpers import RNG
+from ._helpers import RNG, pca, whitening
 
 import numpy as np
 
@@ -89,6 +89,45 @@ def chessboard_synapses(nb_in, nb_out, fill_value=1., nb_rows=2, nb_cols=2, dtyp
     return pattern_synapses(pattern, patch, dtype=dtype, bias=bias)
 
 
+def dct_synapses(nb_in, dtype='float32'):
+    n = np.arange(nb_in)
+    m = np.arange(nb_in)
+    c = (1 / np.sqrt(1 + np.asarray(np.isclose(m, 0), dtype=dtype)))[..., np.newaxis]
+    d = np.cos(np.pi * m[..., np.newaxis] * (2 * n + 1) / (2 * nb_in))
+    A = np.sqrt(2 / nb_in) * c * d
+
+    return A
+
+
+def dct_omm_synapses(omm_ori, dtype='float32'):
+    nb_in = float(np.shape(omm_ori)[0])
+
+    phi, theta, _ = omm_ori.as_euler('ZYX', degrees=False).T
+    phi = phi % (2 * np.pi)
+    theta = (np.pi/2 + theta) % np.pi
+
+    m = np.argsort(phi)
+    n = np.argsort(theta)
+
+    c = (1 / np.sqrt(1 + np.asarray(np.isclose(m, 0), dtype=dtype)))[..., np.newaxis]
+    d = np.cos(np.pi * m[..., np.newaxis] * (2 * n + 1) / (2 * nb_in))
+    A = np.sqrt(2 / nb_in) * c * d
+
+    return A.T
+
+
+def whitening_synapses(samples, samples_mean=None, w_func=pca, dtype='float32', bias=None):
+    if samples_mean is None:
+        samples_mean = samples.mean(axis=0)
+
+    w = w_func(samples, m=samples_mean, dtype=dtype)
+
+    if bias:
+        return w, samples_mean
+    else:
+        return w
+
+
 def pattern_synapses(pattern, patch, dtype='float32', bias=None):
     w = np.kron(pattern, patch)
     if bias is None:
@@ -110,7 +149,3 @@ def roll_synapses(w, left=None, right=None, up=None, down=None):
         w = np.vstack([w[-int(right):, :], w[:-int(right), :]])
 
     return w
-
-
-def gaussian_blurring(nb_in, nb_out, fill_value=1., dtype='float32', bias=None):
-    pass

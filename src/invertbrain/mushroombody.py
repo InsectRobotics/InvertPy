@@ -42,6 +42,8 @@ class MushroomBody(Component):
         self._nb_apl = nb_apl
         self._nb_mbon = nb_mbon
 
+        self.f_cs = lambda x: x
+        self.f_us = lambda x: x
         self.f_dan = lambda x: relu(x, cmax=2)
         self.f_kc = lambda x: relu(x, cmax=2)
         self.f_apl = lambda x: relu(x, cmax=2)
@@ -131,18 +133,20 @@ class MushroomBody(Component):
 
             self._kc[-r-1], self._apl[-r-1], self._dan[-r-1], self._mbon[-r-1] = self._rprop(
                 cs, us, self.r_kc[-r], self.r_apl[-r], self.r_dan[-r], self.r_mbon[-r], v_update=r > 0)
-            self._cs[-r-1] = cs
-            self._us[-r-1] = us
+            self._cs[-r-1] = self.f_cs(cs)
+            self._us[-r-1] = self.f_us(us)
 
         return self._mbon[0]
 
     def _rprop(self, cs: np.ndarray, us: np.ndarray, kc: np.ndarray, apl: np.ndarray, dan: np.ndarray, mbon: np.ndarray,
                v_update=True):
+        a_cs = self.f_cs(cs)
         _kc = kc @ self.w_k2k if self.w_k2k is not None else 0.
-        _kc += cs @ self.w_c2k + apl @ self.w_a2k + self.b_k
+        _kc += a_cs @ self.w_c2k + apl @ self.w_a2k + self.b_k
         a_kc = self.f_kc(self.update_values(_kc, v_pre=kc, eta=None if v_update else (1. - self._lambda)))
 
-        _dan = us @ self.w_u2d + mbon @ self.w_m2d + self.b_d
+        a_us = self.f_us(us)
+        _dan = a_us @ self.w_u2d + mbon @ self.w_m2d + self.b_d
         a_dan = self.f_dan(self.update_values(_dan, v_pre=dan, eta=None if v_update else (1. - self._lambda)))
 
         _apl = kc @ self.w_k2a + self.b_a
@@ -337,7 +341,7 @@ class WillshawNetwork(MushroomBody):
         kwargs.setdefault('nb_cs', 360)
         kwargs.setdefault('nb_us', 1)
         kwargs.setdefault('nb_kc', 200000)
-        kwargs.setdefault('nb_apl', 1)
+        kwargs.setdefault('nb_apl', 0)
         kwargs.setdefault('nb_dan', 1)
         kwargs.setdefault('nb_mbon', 1)
         kwargs.setdefault('learning_rule', anti_hebbian)
@@ -345,10 +349,16 @@ class WillshawNetwork(MushroomBody):
 
         super(WillshawNetwork, self).__init__(*args, **kwargs)
 
+        self.f_cs = lambda x: np.asarray(x > np.sort(x)[int(self.nb_cs * .7)], dtype=self.dtype)
         self.f_dan = lambda x: relu(x, cmax=2)
-        self.f_kc = lambda x: relu(3 * x - 1, cmax=2)
-        self.f_apl = lambda x: relu(x, cmax=2)
-        self.f_mbon = lambda x: relu(x / 4, cmax=2)
+        # self.f_kc = lambda x: np.asarray(x > 0, dtype=self.dtype)
+        self.f_kc = lambda x: np.asarray(
+            x >= np.sort(x)[::-1][int(self.sparseness * self.nb_kc)], dtype=self.dtype)
+        self.f_mbon = lambda x: relu(x)
+
+    def reset(self):
+        super().reset()
+        self.w_rest *= 0
 
     def __repr__(self):
         return "IncentiveCircuit(PN=%d, KC=%d, EN=%d, eligibility_trace=%.2f, plasticity='%s')" % (

@@ -1,26 +1,6 @@
 import numpy as np
 
 
-def get_steering(cx) -> float:
-    """
-    Outputs a scalar where sign determines left or right turn.
-
-    Parameters
-    ----------
-    cx
-
-    Returns
-    -------
-
-    """
-
-    cpu1a = cx.r_cpu1[1:-1]
-    cpu1b = np.array([cx.r_cpu1[-1], cx.r_cpu1[0]])
-    motor = cpu1a @ cx.w_cpu1a2motor + cpu1b @ cx.w_cpu1b2motor
-    output = motor[0] - motor[1]  # * .25  # to kill the noise a bit!
-    return output
-
-
 def image_motion_flow(velocity, v_heading, r_sensor):
     """
     :param velocity: translation (velocity - 3D)
