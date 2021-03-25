@@ -1,3 +1,12 @@
+__author__ = "Evripidis Gkanias"
+__copyright__ = "Copyright (c) 2021, Insect Robotics Group," \
+                "Institude of Perception, Action and Behaviour," \
+                "School of Informatics, the University of Edinburgh"
+__credits__ = ["Evripidis Gkanias"]
+__license__ = "MIT"
+__version__ = "1.0.1"
+__maintainer__ = "Evripidis Gkanias"
+
 from .component import Component
 from .synapses import *
 from .activation import sigmoid
@@ -55,21 +64,21 @@ class CentralComplex(Component):
         self._cpu1 = np.zeros(self.nb_cpu1)
 
         # Weight matrices based on anatomy (These are not changeable!)
-        self._w_tl22cl1 = init_synapses(self.nb_tl2, self.nb_cl1, fill_value=0, dtype=self.dtype)
-        self._w_cl12tb1 = init_synapses(self.nb_cl1, self.nb_tb1, fill_value=0, dtype=self.dtype)
-        self._w_tb12tb1 = init_synapses(self.nb_tb1, self.nb_tb1, fill_value=0, dtype=self.dtype)
-        self._w_tb12cpu4 = init_synapses(self.nb_tb1, self.nb_cpu4, fill_value=0, dtype=self.dtype)
-        self._w_tn22cpu4 = init_synapses(self.nb_tn2, self.nb_cpu4, fill_value=0, dtype=self.dtype)
-        self._w_tb12cpu1a = init_synapses(self.nb_tb1, self.nb_cpu1a, fill_value=0, dtype=self.dtype)
-        self._w_tb12cpu1b = init_synapses(self.nb_tb1, self.nb_cpu1b, fill_value=0, dtype=self.dtype)
-        self._w_cpu42cpu1a = init_synapses(self.nb_cpu4, self.nb_cpu1a, fill_value=0, dtype=self.dtype)
-        self._w_cpu42cpu1b = init_synapses(self.nb_cpu4, self.nb_cpu1b, fill_value=0, dtype=self.dtype)
-        self._w_cpu1a2motor = init_synapses(self.nb_cpu1a, 2, fill_value=0, dtype=self.dtype)
-        self._w_cpu1b2motor = init_synapses(self.nb_cpu1b, 2, fill_value=0, dtype=self.dtype)
+        self._w_tl22cl1 = uniform_synapses(self.nb_tl2, self.nb_cl1, fill_value=0, dtype=self.dtype)
+        self._w_cl12tb1 = uniform_synapses(self.nb_cl1, self.nb_tb1, fill_value=0, dtype=self.dtype)
+        self._w_tb12tb1 = uniform_synapses(self.nb_tb1, self.nb_tb1, fill_value=0, dtype=self.dtype)
+        self._w_tb12cpu4 = uniform_synapses(self.nb_tb1, self.nb_cpu4, fill_value=0, dtype=self.dtype)
+        self._w_tn22cpu4 = uniform_synapses(self.nb_tn2, self.nb_cpu4, fill_value=0, dtype=self.dtype)
+        self._w_tb12cpu1a = uniform_synapses(self.nb_tb1, self.nb_cpu1a, fill_value=0, dtype=self.dtype)
+        self._w_tb12cpu1b = uniform_synapses(self.nb_tb1, self.nb_cpu1b, fill_value=0, dtype=self.dtype)
+        self._w_cpu42cpu1a = uniform_synapses(self.nb_cpu4, self.nb_cpu1a, fill_value=0, dtype=self.dtype)
+        self._w_cpu42cpu1b = uniform_synapses(self.nb_cpu4, self.nb_cpu1b, fill_value=0, dtype=self.dtype)
+        self._w_cpu1a2motor = uniform_synapses(self.nb_cpu1a, 2, fill_value=0, dtype=self.dtype)
+        self._w_cpu1b2motor = uniform_synapses(self.nb_cpu1b, 2, fill_value=0, dtype=self.dtype)
 
-        self._w_pontin2cpu1a = init_synapses(self.nb_cpu1, self.nb_cpu1a, fill_value=0, dtype=self.dtype)
-        self._w_pontin2cpu1b = init_synapses(self.nb_cpu1, self.nb_cpu1b, fill_value=0, dtype=self.dtype)
-        self._w_cpu42pontin = init_synapses(self.nb_cpu4, self.nb_cpu4, fill_value=0, dtype=self.dtype)
+        self._w_pontin2cpu1a = uniform_synapses(self.nb_cpu1, self.nb_cpu1a, fill_value=0, dtype=self.dtype)
+        self._w_pontin2cpu1b = uniform_synapses(self.nb_cpu1, self.nb_cpu1b, fill_value=0, dtype=self.dtype)
+        self._w_cpu42pontin = uniform_synapses(self.nb_cpu4, self.nb_cpu4, fill_value=0, dtype=self.dtype)
 
         self._b_tl2 = 3.0
         self._b_cl1 = -0.5

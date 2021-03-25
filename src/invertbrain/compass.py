@@ -1,5 +1,14 @@
+__author__ = "Evripidis Gkanias"
+__copyright__ = "Copyright (c) 2021, Insect Robotics Group," \
+                "Institude of Perception, Action and Behaviour," \
+                "School of Informatics, the University of Edinburgh"
+__credits__ = ["Evripidis Gkanias"]
+__license__ = "MIT"
+__version__ = "1.0.1"
+__maintainer__ = "Evripidis Gkanias"
+
 from .component import Component
-from .synapses import init_synapses
+from .synapses import uniform_synapses
 from ._helpers import eps
 
 from scipy.spatial.transform import Rotation as R
@@ -21,12 +30,12 @@ class CelestialCompass(Component):
         self._phi_sol = np.linspace(0., 2 * np.pi, nb_sol, endpoint=False)  # SOL preference angles
         self._phi_tcl = np.linspace(0., 2 * np.pi, nb_tcl, endpoint=False)  # TCL preference angles
 
-        self._w_sun = init_synapses(nb_pol, nb_sol, dtype=self.dtype)
-        self._w_sol = init_synapses(nb_pol, nb_sol, dtype=self.dtype)
+        self._w_sun = uniform_synapses(nb_pol, nb_sol, dtype=self.dtype)
+        self._w_sol = uniform_synapses(nb_pol, nb_sol, dtype=self.dtype)
         if integrated:
-            self._w_tcl = init_synapses(nb_pol, nb_tcl, dtype=self.dtype)
+            self._w_tcl = uniform_synapses(nb_pol, nb_tcl, dtype=self.dtype)
         else:
-            self._w_tcl = init_synapses(nb_sol, nb_tcl, dtype=self.dtype)
+            self._w_tcl = uniform_synapses(nb_sol, nb_tcl, dtype=self.dtype)
 
         self.params.extend([
             self._w_sol, self._w_sun, self._w_tcl, self._phi_sol, self._phi_sun, self._phi_tcl

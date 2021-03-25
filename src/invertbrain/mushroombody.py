@@ -1,28 +1,78 @@
+"""
+Package that holds implementations of the Mushroom Body component of the insect brain.
+"""
+
+__author__ = "Evripidis Gkanias"
+__copyright__ = "Copyright (c) 2021, Insect Robotics Group," \
+                "Institude of Perception, Action and Behaviour," \
+                "School of Informatics, the University of Edinburgh"
+__credits__ = ["Evripidis Gkanias"]
+__license__ = "MIT"
+__version__ = "1.0.1"
+__maintainer__ = "Evripidis Gkanias"
+
 from .component import Component
 from .plasticity import dopaminergic, anti_hebbian
-from .synapses import init_synapses, diagonal_synapses, sparse_synapses, opposing_synapses, roll_synapses
+from .synapses import uniform_synapses, diagonal_synapses, sparse_synapses, opposing_synapses, roll_synapses
 from .activation import relu
 
 import numpy as np
 
 
 class MushroomBody(Component):
-    def __init__(self, nb_cs: int, nb_us: int, nb_kc: int, nb_dan: int, nb_mbon: int, nb_apl: int,
-                 learning_rule: callable = dopaminergic, sparseness: float = 0.03, *args, **kwargs):
-        super().__init__(nb_cs + nb_us, nb_mbon, *args, **kwargs)
+    def __init__(self, nb_cs, nb_us, nb_kc, nb_dan, nb_mbon, nb_apl=1, learning_rule=dopaminergic, sparseness=0.03,
+                 *args, **kwargs):
+        """
+        The Mushroom Body component of the insect brain is responsible for creating associations between the input (CS)
+        and output (MBON) based on the reinforcement (US) and by modulating the KC-MBON connections. The KCs receive CS
+        input and their output activates the MBONs. The APL works as a dynamic threshold for the KCs receiving input
+        from them and inhibiting them via global and local inhibition. DANs get US input and their output modulate the
+        KC-MBON connections. There are also KC-KC and MBON-DAN connections supported.
+
+        Parameters
+        ----------
+        nb_cs: int
+            The number of dimensions for the Conditional Stimulus (CS), equivalent to the number of Projection Neurons
+            (PNs).
+        nb_us: int
+            The number of dimensions for the Unconditional Stimulus (US), equivalent to the reinforcement signal.
+        nb_kc: int
+            The number of Kenyon cells (KCs); intrinsic neurons of the mushroom body.
+        nb_dan: int
+            The number of Dopaminergic Neurons (DANs); reinforcement encoding extrinsic neurons of the mushroom body.
+        nb_mbon: int
+            The number of Mushroom Body Output Neurons (MBONs). This is equivalent to the nb_output.
+        nb_apl: int
+            The number of Anterior Pair Lateral (APL) neurons. Default is 1.
+        learning_rule: callable, str
+            The name of a learning rule or a function representing it. The function could have as input:
+                w - the synaptic weights to be updated,
+                r_pre - the pre-synaptic responses,
+                r_post - the post synaptic responses,
+                rein - the reinforcement signal or the dopaminergic factor,
+                learning_rate - the learning rate,
+                w_rest - the resting values for the synaptic weights.
+            Default is the 'dopaminergic' learning rule.
+        sparseness: float
+            The percentage of the number of KCs that needs to be active. Default is 3%.
+        """
+        if nb_mbon is None and 'nb_output' in kwargs.keys():
+            nb_mbon = kwargs.pop('nb_output')
+
+        super().__init__(nb_cs + nb_us, nb_mbon, learning_rule=learning_rule, *args, **kwargs)
 
         # set the parameters (synapses)
-        self._w_c2k = init_synapses(nb_cs, nb_kc, dtype=self.dtype)
+        self._w_c2k = uniform_synapses(nb_cs, nb_kc, dtype=self.dtype)
         self._w_k2k = None
-        self._w_a2k, self._b_k = init_synapses(nb_apl, nb_kc, dtype=self.dtype, bias=0)
-        self._w_k2m = init_synapses(nb_kc, nb_mbon, dtype=self.dtype)
-        self._w_m2m, self._b_m = init_synapses(nb_mbon, nb_mbon, dtype=self.dtype, bias=0)
-        self._w_u2d = init_synapses(nb_us, nb_dan, dtype=self.dtype)
-        self._w_m2d, self._b_d = init_synapses(nb_mbon, nb_dan, dtype=self.dtype, bias=0)
-        self._w_k2a, self._b_a = init_synapses(nb_kc, nb_apl, dtype=self.dtype, bias=0)
+        self._w_a2k, self._b_k = uniform_synapses(nb_apl, nb_kc, dtype=self.dtype, bias=0)
+        self._w_k2m = uniform_synapses(nb_kc, nb_mbon, dtype=self.dtype)
+        self._w_m2m, self._b_m = uniform_synapses(nb_mbon, nb_mbon, dtype=self.dtype, bias=0)
+        self._w_u2d = uniform_synapses(nb_us, nb_dan, dtype=self.dtype)
+        self._w_m2d, self._b_d = uniform_synapses(nb_mbon, nb_dan, dtype=self.dtype, bias=0)
+        self._w_k2a, self._b_a = uniform_synapses(nb_kc, nb_apl, dtype=self.dtype, bias=0)
 
-        self._w_d2m = init_synapses(nb_dan, nb_mbon, dtype=self.dtype)
-        self._w_rest = init_synapses(nb_kc, nb_mbon, dtype=self.dtype)
+        self._w_d2m = uniform_synapses(nb_dan, nb_mbon, dtype=self.dtype)
+        self._w_rest = uniform_synapses(nb_kc, nb_mbon, dtype=self.dtype)
 
         self.params.extend([self.w_c2k, self.w_a2k, self.w_k2m, self.w_m2m, self.w_u2d, self.w_m2d, self.w_k2a,
                             self.w_d2m, self.w_rest, self.b_k, self.b_m, self.b_d, self.b_a])
@@ -49,7 +99,6 @@ class MushroomBody(Component):
         self.f_apl = lambda x: relu(x, cmax=2)
         self.f_mbon = lambda x: relu(x, cmax=2)
 
-        self._learning_rule = learning_rule
         self._sparseness = sparseness
 
         self.cs_names = ["c_{%d}" % i for i in range(nb_cs)]
@@ -65,18 +114,19 @@ class MushroomBody(Component):
         # reset synapses
         self.w_c2k = sparse_synapses(self.nb_cs, self.nb_kc, dtype=self.dtype)
         self.w_c2k *= self.nb_cs / self.w_c2k.sum(axis=1)[:, np.newaxis]
+
         # by default KC2KC connections are not supported so we save space by not allocating the memory
         self._w_k2k = None
-        self.w_a2k, self.b_k = init_synapses(self.nb_apl, self.nb_kc, fill_value=-1, dtype=self.dtype, bias=0)
-        self.w_k2m = init_synapses(self.nb_kc, self.nb_mbon, fill_value=1, dtype=self.dtype)
-        self.w_m2m, self.b_m = init_synapses(self.nb_mbon, self.nb_mbon, fill_value=0, dtype=self.dtype, bias=0)
+        self.w_a2k, self.b_k = uniform_synapses(self.nb_apl, self.nb_kc, fill_value=-1, dtype=self.dtype, bias=0)
+        self.w_k2m = uniform_synapses(self.nb_kc, self.nb_mbon, fill_value=1, dtype=self.dtype)
+        self.w_m2m, self.b_m = uniform_synapses(self.nb_mbon, self.nb_mbon, fill_value=0, dtype=self.dtype, bias=0)
         self.w_u2d = diagonal_synapses(self.nb_us, self.nb_dan, fill_value=2, dtype=self.dtype)
-        self.w_m2d, self.b_d = init_synapses(self.nb_mbon, self.nb_dan, fill_value=0, dtype=self.dtype, bias=0)
-        self.w_k2a, self.b_a = init_synapses(self.nb_kc, self.nb_apl, dtype=self.dtype, bias=0,
-                                             fill_value=2. * (1. - self._sparseness) / float(self.nb_kc))
+        self.w_m2d, self.b_d = uniform_synapses(self.nb_mbon, self.nb_dan, fill_value=0, dtype=self.dtype, bias=0)
+        self.w_k2a, self.b_a = uniform_synapses(self.nb_kc, self.nb_apl, dtype=self.dtype, bias=0,
+                                                fill_value=2. * (1. - self._sparseness) / float(self.nb_kc))
 
         self.w_d2m = diagonal_synapses(self.nb_dan, self.nb_mbon, fill_value=-1, dtype=self.dtype)
-        self.w_rest = init_synapses(self.nb_kc, self.nb_mbon, fill_value=1, dtype=self.dtype)
+        self.w_rest = uniform_synapses(self.nb_kc, self.nb_mbon, fill_value=1, dtype=self.dtype)
 
         # reset responses
         self._cs = np.zeros((self._repeats, self.nb_cs), dtype=self.dtype)
@@ -88,7 +138,23 @@ class MushroomBody(Component):
 
         self.update = True
 
-    def get_response(self, neuron_name: str, all_repeats: bool = False):
+    def get_response(self, neuron_name, all_repeats=False):
+        """
+        Identifies a neuron by its name and returns its response or all the updates of its response during the repeats.
+
+        Parameters
+        ----------
+        neuron_name: str
+            The name of the neuron.
+        all_repeats: bool
+            Where or not to return the responses during all the repeats. By default it returns only the final response.
+
+        Returns
+        -------
+            r: np.ndarray
+                the response(s) of the specified neuron. If the name of the neuron is not found, it returns None.
+
+        """
         if neuron_name in self.cs_names:
             if all_repeats:
                 return self.r_cs[..., self.cs_names.index(neuron_name)]
@@ -123,7 +189,24 @@ class MushroomBody(Component):
         else:
             return None
 
-    def _fprop(self, cs: np.ndarray = None, us: np.ndarray = None):
+    def _fprop(self, cs=None, us=None):
+        """
+        It propagates the CS and US signal forwards through the connections of the model for nb_repeats times. It
+        updates the internal responses of the neurons and returns the final output of the MBONs.
+
+        Parameters
+        ----------
+        cs: np.ndarray
+            the CS input. Default is 0.
+        us: np.ndarray
+            the US reinforcement. Default is 0.
+
+        Returns
+        -------
+        r_mbon: np.ndarray
+            the MBONs' responses
+
+        """
         if cs is None:
             cs = np.zeros_like(self._cs[0])
         if us is None:
@@ -138,22 +221,54 @@ class MushroomBody(Component):
 
         return self._mbon[0]
 
-    def _rprop(self, cs: np.ndarray, us: np.ndarray, kc: np.ndarray, apl: np.ndarray, dan: np.ndarray, mbon: np.ndarray,
-               v_update=True):
+    def _rprop(self, cs, us, kc_pre, apl_pre, dan_pre, mbon_pre, v_update=True):
+        """
+        Running the forward propagation for a single repeat.
+
+        Parameters
+        ----------
+        cs: np.ndarray
+            The current CS input.
+        us: np.ndarray
+            The current US reinforcement.
+        kc_pre: np.ndarray
+            The old KC responses.
+        apl_pre: np.ndarray
+            The old APL responses.
+        dan_pre: np.ndarray
+            The old DAN responses.
+        mbon_pre: np.ndarray
+            The old MBON responses.
+        v_update: bool
+            Whether or not to update the value based on the old one or not. If not, then it is updated based on the
+            eligibility trace.
+
+        Returns
+        -------
+        r_post: tuple
+            kc_post: np.ndarray
+                the new KC responses.
+            apl_post: np.ndarray
+                the new APL responses.
+            dan_post: np.ndarray
+                the new DAN responses.
+            mbon_post: np.ndarray
+                the new MBON responses.
+        """
         a_cs = self.f_cs(cs)
-        _kc = kc @ self.w_k2k if self.w_k2k is not None else 0.
-        _kc += a_cs @ self.w_c2k + apl @ self.w_a2k + self.b_k
-        a_kc = self.f_kc(self.update_values(_kc, v_pre=kc, eta=None if v_update else (1. - self._lambda)))
+        _kc = kc_pre @ self.w_k2k if self.w_k2k is not None else 0.
+        _kc += a_cs @ self.w_c2k + apl_pre @ self.w_a2k + self.b_k
+        a_kc = self.f_kc(self.update_values(_kc, v_pre=kc_pre, eta=None if v_update else (1. - self._lambda)))
 
         a_us = self.f_us(us)
-        _dan = a_us @ self.w_u2d + mbon @ self.w_m2d + self.b_d
-        a_dan = self.f_dan(self.update_values(_dan, v_pre=dan, eta=None if v_update else (1. - self._lambda)))
+        _dan = a_us @ self.w_u2d + mbon_pre @ self.w_m2d + self.b_d
+        a_dan = self.f_dan(self.update_values(_dan, v_pre=dan_pre, eta=None if v_update else (1. - self._lambda)))
 
-        _apl = kc @ self.w_k2a + self.b_a
-        a_apl = self.f_apl(self.update_values(_apl, v_pre=apl, eta=None if v_update else (1. - self._lambda)))
+        _apl = kc_pre @ self.w_k2a + self.b_a
+        a_apl = self.f_apl(self.update_values(_apl, v_pre=apl_pre, eta=None if v_update else (1. - self._lambda)))
 
-        _mbon = kc @ self.w_k2m + mbon @ self.w_m2m + self.b_m
-        a_mbon = self.f_mbon(self.update_values(_mbon, v_pre=mbon, eta=None if v_update else (1. - self._lambda)))
+        _mbon = kc_pre @ self.w_k2m + mbon_pre @ self.w_m2m + self.b_m
+        a_mbon = self.f_mbon(self.update_values(_mbon, v_pre=mbon_pre, eta=None if v_update else (1. - self._lambda)))
 
         if self.update:
             if self.learning_rule == "dopaminergic":
@@ -172,6 +287,9 @@ class MushroomBody(Component):
 
     @property
     def w_c2k(self):
+        """
+        The CS-KC synaptic weights.
+        """
         return self._w_c2k
 
     @w_c2k.setter
@@ -180,6 +298,9 @@ class MushroomBody(Component):
 
     @property
     def w_k2k(self):
+        """
+        The KC-KC synaptic weights.
+        """
         return self._w_k2k
 
     @w_k2k.setter
@@ -188,6 +309,9 @@ class MushroomBody(Component):
 
     @property
     def w_a2k(self):
+        """
+        The APL-KC synaptic weights.
+        """
         return self._w_a2k
 
     @w_a2k.setter
@@ -196,6 +320,9 @@ class MushroomBody(Component):
 
     @property
     def w_k2m(self):
+        """
+        The KC-MBON synaptic weights.
+        """
         return self._w_k2m
 
     @w_k2m.setter
@@ -204,6 +331,9 @@ class MushroomBody(Component):
 
     @property
     def w_m2m(self):
+        """
+        The MBON-MBON synaptic weights.
+        """
         return self._w_m2m
 
     @w_m2m.setter
@@ -212,6 +342,9 @@ class MushroomBody(Component):
 
     @property
     def w_u2d(self):
+        """
+        The US-DAN synaptic weights.
+        """
         return self._w_u2d
 
     @w_u2d.setter
@@ -220,6 +353,9 @@ class MushroomBody(Component):
 
     @property
     def w_m2d(self):
+        """
+        The MBON-DAN synaptic weights.
+        """
         return self._w_m2d
 
     @w_m2d.setter
@@ -228,6 +364,9 @@ class MushroomBody(Component):
 
     @property
     def w_k2a(self):
+        """
+        The KC-APL synaptic weights.
+        """
         return self._w_k2a
 
     @w_k2a.setter
@@ -236,6 +375,9 @@ class MushroomBody(Component):
 
     @property
     def w_d2m(self):
+        """
+        The dopaminergic strength of each DAN that transforms them into the dopaminergic factor.
+        """
         return self._w_d2m
 
     @w_d2m.setter
@@ -244,6 +386,9 @@ class MushroomBody(Component):
 
     @property
     def b_k(self):
+        """
+        The KC bias.
+        """
         return self._b_k
 
     @b_k.setter
@@ -252,6 +397,9 @@ class MushroomBody(Component):
 
     @property
     def b_m(self):
+        """
+        The MBON bias.
+        """
         return self._b_m
 
     @b_m.setter
@@ -260,6 +408,9 @@ class MushroomBody(Component):
 
     @property
     def b_d(self):
+        """
+        The DAN bias.
+        """
         return self._b_d
 
     @b_d.setter
@@ -268,6 +419,9 @@ class MushroomBody(Component):
 
     @property
     def b_a(self):
+        """
+        The APL bias.
+        """
         return self._b_a
 
     @b_a.setter
@@ -276,6 +430,9 @@ class MushroomBody(Component):
 
     @property
     def w_rest(self):
+        """
+        The resting synaptic weights for the w_k2m.
+        """
         return self._w_rest
 
     @w_rest.setter
@@ -284,54 +441,93 @@ class MushroomBody(Component):
 
     @property
     def nb_cs(self):
+        """
+        The CS number of dimensions.
+        """
         return self._nb_cs
 
     @property
     def nb_us(self):
+        """
+        The US number of dimensions.
+        """
         return self._nb_us
 
     @property
     def nb_dan(self):
+        """
+        The number of DANs.
+        """
         return self._nb_dan
 
     @property
     def nb_kc(self):
+        """
+        The number of KCs.
+        """
         return self._nb_kc
 
     @property
     def nb_apl(self):
+        """
+        The number of APLs.
+        """
         return self._nb_apl
 
     @property
     def nb_mbon(self):
+        """
+        The number of MBONs.
+        """
         return self._nb_mbon
 
     @property
     def r_cs(self):
+        """
+        The CS responses.
+        """
         return self._cs
 
     @property
     def r_us(self):
+        """
+        The US responses.
+        """
         return self._us
 
     @property
     def r_dan(self):
+        """
+        The DAN responses.
+        """
         return self._dan
 
     @property
     def r_kc(self):
+        """
+        The KC responses.
+        """
         return self._kc
 
     @property
     def r_apl(self):
+        """
+        The APL responses.
+        """
         return self._apl
 
     @property
     def r_mbon(self):
+        """
+        The MBON responses.
+        """
         return self._mbon
 
     @property
     def sparseness(self):
+        """
+        The sparseness of the KCs: the percentage of the KCs that are active in every time-step.
+        """
         return self._sparseness
 
 
@@ -405,9 +601,9 @@ class IncentiveCircuit(MushroomBody):
         prs, pre = self._prs, self._pre
         pms, pme = self._pms, self._pme
 
-        self.w_d2m, self.b_m = init_synapses(self.nb_dan, self.nb_mbon, dtype=self.dtype, bias=0.)
-        self.w_m2d, self.b_d = init_synapses(self.nb_mbon, self.nb_dan, dtype=self.dtype, bias=0.)
-        self.w_m2m = init_synapses(self.nb_mbon, self.nb_mbon, dtype=self.dtype)
+        self.w_d2m, self.b_m = uniform_synapses(self.nb_dan, self.nb_mbon, dtype=self.dtype, bias=0.)
+        self.w_m2d, self.b_d = uniform_synapses(self.nb_mbon, self.nb_dan, dtype=self.dtype, bias=0.)
+        self.w_m2m = uniform_synapses(self.nb_mbon, self.nb_mbon, dtype=self.dtype)
 
         self.b_d[pds:pde] = -.5
         self.b_d[pcs:pce] = -.15
@@ -464,7 +660,7 @@ class IncentiveCircuit(MushroomBody):
 
         self.w_c2k *= self._cs_magnitude
 
-        self.w_u2d = init_synapses(self.nb_us, self.nb_dan, dtype=self.dtype)
+        self.w_u2d = uniform_synapses(self.nb_us, self.nb_dan, dtype=self.dtype)
         self.w_u2d[:, pds:pde] = diagonal_synapses(pde - pds, pde - pds,
                                                    fill_value=self._us_magnitude, dtype=self.dtype)
         self.w_u2d[:, pcs:pce] = diagonal_synapses(pce - pcs, pce - pcs,

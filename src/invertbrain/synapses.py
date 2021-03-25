@@ -1,9 +1,22 @@
+"""
+Package that contains helpers for initialising the synaptic weights between groups of neurons.
+"""
+
+__author__ = "Evripidis Gkanias"
+__copyright__ = "Copyright (c) 2021, Insect Robotics Group," \
+                "Institude of Perception, Action and Behaviour," \
+                "School of Informatics, the University of Edinburgh"
+__credits__ = ["Evripidis Gkanias"]
+__license__ = "MIT"
+__version__ = "1.0.1"
+__maintainer__ = "Evripidis Gkanias"
+
 from ._helpers import RNG, pca, whitening
 
 import numpy as np
 
 
-def init_synapses(nb_in, nb_out, fill_value=0, dtype='float32', bias=None):
+def uniform_synapses(nb_in, nb_out, fill_value=0, dtype='float32', bias=None):
     w = np.full((nb_in, nb_out), fill_value=fill_value, dtype=dtype)
     if bias is None:
         return w
@@ -29,7 +42,7 @@ def diagonal_synapses(nb_in, nb_out, fill_value=1, tile=False, dtype='float32', 
 
 
 def sparse_synapses(nb_in, nb_out, nb_in_min=None, nb_in_max=None, normalise=True, dtype='float32', rng=RNG, bias=None):
-    w = init_synapses(nb_in, nb_out, dtype=dtype)
+    w = uniform_synapses(nb_in, nb_out, dtype=dtype)
 
     if nb_in_min is None:  # default: 6
         nb_in_min = max(int(nb_in * 6. / 1000.), 1)

@@ -7,7 +7,6 @@ __license__ = "MIT"
 __version__ = "1.0.1"
 __maintainer__ = "Evripidis Gkanias"
 
-
 from invertbrain.activation import softmax
 from .sensor import Sensor
 from ._helpers import fibonacci_sphere, eps
