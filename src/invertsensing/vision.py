@@ -107,7 +107,6 @@ class CompoundEye(Sensor):
         c_sensitive /= np.maximum(c_sensitive.sum(axis=1), eps)[..., np.newaxis]
 
         self._omm_ori = omm_ori
-        self._omm_ori_gau = None
         self._omm_xyz = omm_xyz
         self._omm_pol = omm_pol_op
         self._omm_rho = omm_rho
@@ -125,73 +124,71 @@ class CompoundEye(Sensor):
     def reset(self):
         self._w_o2r = np.eye(self._nb_input, self._nb_output[0], dtype=self.dtype)
 
-        nb_omm = self.omm_xyz.shape[0]
-        self._omm_ori_gau = [R.from_euler('Z', np.zeros((nb_omm, 1), dtype=self.dtype)) for _ in range(6)]
+        nb_omm = self.nb_ommatidia
+        omm_ori_gau = [R.from_euler('Z', np.zeros((nb_omm, 1), dtype=self.dtype)) for _ in range(6)]
         for i in range(6):
             ori_p = R.from_euler(
                 'XY', np.vstack([np.full_like(self._omm_rho, i*np.pi/3), self._omm_rho/2]).T)
-            self._omm_ori_gau[i] = self._omm_ori * ori_p
+            omm_ori_gau[i] = self.omm_ori * ori_p
+        self._omm_ori = R.from_quat(
+            np.vstack([self.omm_ori.as_quat()] + [oog.as_quat() for oog in omm_ori_gau]))
+        omm_ori_gau = [self._omm_ori[(i+1) * self.nb_ommatidia:(i+2) * self.nb_ommatidia] for i in range(6)]
 
         self._ori = copy(self._ori_init)
 
         # the small radius of each ommatidium (from the centre of the lens to the edges) in mm
-        r_l = np.linalg.norm(self._omm_ori_gau[0].apply([1, 0, 0]) - self._omm_ori.apply([1, 0, 0]), axis=1)
+        r_l = np.linalg.norm(omm_ori_gau[0].apply([1, 0, 0]) - self.omm_ori.apply([1, 0, 0]), axis=1)
         self._omm_area = np.pi * np.square(r_l)
 
     def _sense(self, sky=None, scene=None):
         w_c = self._c_sensitive
         omm_ori_glob = self._ori * self._omm_ori
-        omm_oris_gau_glob = []
-        for i, omm_ori_gau in enumerate(self._omm_ori_gau):
-            omm_oris_gau_glob.append(self._ori * omm_ori_gau)
+        nb_gau = len(omm_ori_glob) // self.nb_ommatidia - 1
 
-        y = np.full((len(self._omm_ori_gau) + 1, np.shape(omm_ori_glob)[0]), np.nan, dtype=self.dtype)
-        p = np.full((len(self._omm_ori_gau) + 1, np.shape(omm_ori_glob)[0]), np.nan, dtype=self.dtype)
-        a = np.full((len(self._omm_ori_gau) + 1, np.shape(omm_ori_glob)[0]), np.nan, dtype=self.dtype)
-        c = np.full((len(self._omm_ori_gau) + 1, np.shape(omm_ori_glob)[0]), np.nan, dtype=self.dtype)
+        y = np.full(len(self._omm_ori), np.nan, dtype=self.dtype)
+        p = np.full(len(self._omm_ori), np.nan, dtype=self.dtype)
+        a = np.full(len(self._omm_ori), np.nan, dtype=self.dtype)
+        c = np.full(len(self._omm_ori), np.nan, dtype=self.dtype)
         br = 1.
 
         if sky is not None:
             br = np.clip(np.sin(sky.theta_s), 0.1, 1)
-            y[0], p[0], a[0] = sky(omm_ori_glob, irgbu=w_c, noise=self.noise)
-            # initialise weights for the gaussian blur of each ommatidium
-
-            # add contributions of each of the six edges of the ommatidium to the received information
-            for i, omm_ori_gau_glob in enumerate(omm_oris_gau_glob):
-                y[i+1], p[i+1], a[i+1] = sky(omm_ori_gau_glob, irgbu=w_c, noise=self.noise)
+            y[:], p[:], a[:] = sky(omm_ori_glob, irgbu=w_c, noise=self.noise)
         else:
             y[:] = 1.
             p[:] = 0.
             a[:] = 0.
 
         if scene is not None:
-            omm_pos_glob = self.xyz + self._ori.apply(self._omm_xyz)
-            c[0] = 1 - np.sum(scene(omm_pos_glob, ori=omm_ori_glob,
-                                    brightness=br, noise=self.noise) * w_c[..., 1:4], axis=1)
-
-            for i, omm_ori_gau_glob in enumerate(omm_oris_gau_glob):
-                c[i+1] = 1 - np.sum(scene(omm_pos_glob, ori=omm_ori_gau_glob,
-                                          brightness=br, noise=self.noise) * w_c[..., 1:4], axis=1)
+            omm_pos_glob = self.xyz.reshape((1, -1))
+            s = np.sum(scene(omm_pos_glob, ori=omm_ori_glob, brightness=br, noise=self.noise) * w_c[..., 1:4], axis=1)
+            c[:] = 1 - s
 
         # add the contribution of the scene to the input from the sky
-        y[~np.isnan(c)] = c[~np.isnan(c)] * np.nanmin(y[np.isnan(c)]) / 2
+        if np.all(np.isnan(y)) or np.all(~np.isnan(c)):
+            max_brightness = 1.
+        else:
+            max_brightness = np.sqrt(np.nanmin(y[np.isnan(c)]))
+        y[~np.isnan(c)] = c[~np.isnan(c)] * max_brightness
         p[~np.isnan(c)] = 0.
         a[~np.isnan(c)] = 0.
 
         # mix the values of each ommatidium with Gaussians
-        nb_gau = len(self._omm_ori_gau)
         w_gau = [1.] + [self._w_gau] * nb_gau
 
         # control the brightness due to wider acceptance angle
         # area * responsivity * radiation
-        y_masked = np.ma.masked_array(y, np.isnan(y))
+        yy = y.reshape((nb_gau+1, -1))
+        y_masked = np.ma.masked_array(yy, np.isnan(yy))
         y0 = np.ma.average(y_masked, axis=0, weights=w_gau) * self._omm_area * self._omm_res
 
-        p_masked = np.ma.masked_array(p, np.isnan(p))
+        pp = p.reshape((nb_gau+1, -1))
+        p_masked = np.ma.masked_array(pp, np.isnan(pp))
         p0 = np.ma.average(p_masked, axis=0, weights=w_gau)
 
+        aa = a.reshape((nb_gau+1, -1))
         # transform angle of polarisation into a complex number to allow calculation of means
-        a_masked = np.ma.masked_array(np.exp(1j * a), np.isnan(a))
+        a_masked = np.ma.masked_array(np.exp(1j * aa), np.isnan(aa))
         a0 = np.ma.average(a_masked, axis=0, weights=w_gau)
         # transform the complex number back to an angle
         a0 = (np.angle(a0) + np.pi) % (2 * np.pi) - np.pi
@@ -202,8 +199,8 @@ class CompoundEye(Sensor):
 
         # apply the opponent polarisation filters
         op = self._omm_pol.reshape((-1, 1))
-        pol_main = (self._ori * self._omm_ori).as_euler('ZYX', degrees=False)[..., 0].reshape((-1, 1))
-        ori_op = np.zeros((np.shape(self._omm_ori)[0], 2), dtype=self.dtype)
+        pol_main = (self._ori * self.omm_ori).as_euler('ZYX', degrees=False)[..., 0].reshape((-1, 1))
+        ori_op = np.zeros((np.shape(self.omm_ori)[0], 2), dtype=self.dtype)
         ori_op[..., 1] = np.pi/2
 
         # calculate the responses for the 2 opponent photo-receptors
@@ -227,7 +224,7 @@ class CompoundEye(Sensor):
 
     @property
     def omm_ori(self):
-        return self._omm_ori
+        return self._omm_ori[:self.nb_ommatidia]
 
     @property
     def omm_rho(self):
