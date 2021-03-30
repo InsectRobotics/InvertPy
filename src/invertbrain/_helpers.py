@@ -1,3 +1,7 @@
+"""
+Helpers for the InvertBrain package. Contains functions for whitening and random generators.
+"""
+
 __author__ = "Evripidis Gkanias"
 __copyright__ = "Copyright (c) 2021, Insect Robotics Group," \
                 "Institude of Perception, Action and Behaviour," \
@@ -14,6 +18,13 @@ eps = np.finfo(float).eps
 
 
 def set_rng(seed):
+    """
+    Sets the default random state.
+
+    Parameters
+    ----------
+    seed: int
+    """
     global RNG
     RNG = np.random.RandomState(seed)
 
@@ -104,6 +115,7 @@ def build_kernel(x, svd2ker, m=None, epsilon=10e-5, dtype='float32'):
 
 def zca(x, shape=None, m=None, epsilon=10e-5, dtype='float32'):
     """
+    The zero-phase component analysis (ZCA) kernel for whitening (Bell and Sejnowski, 1996).
 
     Parameters
     ----------
@@ -119,7 +131,8 @@ def zca(x, shape=None, m=None, epsilon=10e-5, dtype='float32'):
 
     Returns
     -------
-
+    w_zca: np.ndarray
+        the ZCA whitening kernel
     """
     if shape is not None:
         x = x.reshape(shape)
@@ -128,6 +141,7 @@ def zca(x, shape=None, m=None, epsilon=10e-5, dtype='float32'):
 
 def pca(x, shape=None, m=None, epsilon=10e-5, dtype='float32'):
     """
+    The principal component analysis (PCA) kernel for whitening.
 
     Parameters
     ----------
@@ -143,6 +157,8 @@ def pca(x, shape=None, m=None, epsilon=10e-5, dtype='float32'):
 
     Returns
     -------
+    w_pca: np.ndarray
+        the PCA whitening kernel
 
     """
     if shape is not None:
@@ -172,6 +188,7 @@ def whitening(x, w=None, m=None, func=pca, epsilon=10e-5, reshape='first'):
 
     Returns
     -------
+    X: np.ndarray
         the transformed data.
 
     """

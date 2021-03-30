@@ -115,9 +115,12 @@ class CompoundEye(Sensor):
         self._w_o2r = None  # ommatidia to responses
         # contribution of each six points on the edges of the ommatidia
         # (sigma/2 distance from the centre of the Gaussian)
+        # self._nb_gau = (np.nanmax(self._omm_rho) // np.rad2deg(10) + 1) * 6
         self._w_gau = np.exp(-.5)
         self._ori_init = copy(self._ori)
         self._c_sensitive = c_sensitive
+
+        self._r = None
 
         self.reset()
 
@@ -174,7 +177,9 @@ class CompoundEye(Sensor):
         a[~np.isnan(c)] = 0.
 
         # mix the values of each ommatidium with Gaussians
-        w_gau = [1.] + [self._w_gau] * nb_gau
+        if isinstance(self._w_gau, float):
+            self._w_gau = [1.] + [self._w_gau] * nb_gau
+        w_gau = self._w_gau
 
         # control the brightness due to wider acceptance angle
         # area * responsivity * radiation
@@ -208,8 +213,9 @@ class CompoundEye(Sensor):
                    np.square(np.cos(a0 - pol_main + ori_op)) * np.square(1. - p0)) * op +
                   (1. - op))
         r = np.sqrt(s)
+        self._r = np.clip(r, 0, 1)
 
-        return np.array(r)
+        return self._r
 
     def __repr__(self):
         return ("CompoundEye(ommatidia=%d, responses=(%d, %d), "
@@ -249,6 +255,10 @@ class CompoundEye(Sensor):
     @property
     def nb_ommatidia(self):
         return self._omm_xyz.shape[0]
+
+    @property
+    def responses(self):
+        return self._r
 
 
 def mental_rotation_matrix(eye: CompoundEye, nb_rotates=8, dtype='float32'):

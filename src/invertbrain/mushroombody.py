@@ -1,5 +1,9 @@
 """
 Package that holds implementations of the Mushroom Body component of the insect brain.
+
+References:
+    Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to Encode Route
+    Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
 """
 
 __author__ = "Evripidis Gkanias"
@@ -532,18 +536,17 @@ class MushroomBody(Component):
 
 
 class WillshawNetwork(MushroomBody):
-    def __init__(self, *args, **kwargs):
 
-        kwargs.setdefault('nb_cs', 360)
-        kwargs.setdefault('nb_us', 1)
-        kwargs.setdefault('nb_kc', 200000)
-        kwargs.setdefault('nb_apl', 0)
-        kwargs.setdefault('nb_dan', 1)
-        kwargs.setdefault('nb_mbon', 1)
-        kwargs.setdefault('learning_rule', anti_hebbian)
-        kwargs.setdefault('eligibility_trace', .1)
+    def __init__(self, nb_cs=360, nb_us=1, nb_kc=200000, nb_apl=0, nb_dan=1, nb_mbon=1, learning_rule=anti_hebbian,
+                 eligibility_trace=.1, *args, **kwargs):
+        """
+        The Whillshaw Network is a simplified Mushroom Body component and it does not contain MBON-to-DAN connections.
+        This model is a modified version of the one presented in Ardin et al (2016).
+        """
 
-        super(WillshawNetwork, self).__init__(*args, **kwargs)
+        super(WillshawNetwork, self).__init__(
+            nb_cs=nb_cs, nb_us=nb_us, nb_kc=nb_kc, nb_apl=nb_apl, nb_dan=nb_dan, nb_mbon=nb_mbon,
+            learning_rule=learning_rule, eligibility_trace=eligibility_trace, *args, **kwargs)
 
         self.f_cs = lambda x: np.asarray(x > np.sort(x)[int(self.nb_cs * .7)], dtype=self.dtype)
         self.f_dan = lambda x: relu(x, cmax=2)
@@ -563,15 +566,36 @@ class WillshawNetwork(MushroomBody):
 
 
 class IncentiveCircuit(MushroomBody):
-    def __init__(self, cs_magnitude: float = 2., us_magnitude: float = 2., ltm_charging_speed: float = .05,
-                 *args, **kwargs):
-        kwargs.setdefault('nb_cs', 2)
-        kwargs.setdefault('nb_us', 2)
-        kwargs.setdefault('nb_kc', 10)
-        kwargs.setdefault('nb_apl', 0)
-        kwargs.setdefault('nb_dan', 6)
-        kwargs.setdefault('nb_mbon', 6)
-        kwargs.setdefault('learning_rule', dopaminergic)
+    def __init__(self, nb_cs=2, nb_us=2, nb_kc=10, nb_apl=0, nb_dan=3, nb_mbon=3, learning_rule=dopaminergic,
+                 cs_magnitude=2., us_magnitude=2., ltm_charging_speed=.05, *args, **kwargs):
+        """
+        The Incentive Circuit is a representative compartment of the Mushroom Body that encodes the memory dynamics of
+        model in small scale and it contains MBON-DAN and MBON-MBON feedback connections. This model was first
+        presented in Gkanias et al (2021).
+
+        Parameters
+        ----------
+        nb_cs: int
+            the number of neurons representing the conditional stimulus (CS) or the projection neurons (PN).
+        nb_us: int
+            the number of neurons representing the unconditional stimulus (US).
+        nb_kc: int
+            the number of Kenyon cells (KCs).
+        nb_apl: int
+            the number of Anterior pair lateral (APL) neurons
+        nb_dan: int
+            the number of Dopaminergic neurons (DANs).
+        nb_mbon: int
+            the number of MB output neurons (MBONs).
+        learning_rule: callable | str
+            the learning rule for the updates of the KC-MBON synaptic weights.
+        cs_magnitude: float
+            a constant that the CS will be multiplied with before feeding to the KCs.
+        us_magnitude: float
+            a constant that the US will be multiplied with before feeding to the DANs.
+        ltm_charging_speed: float
+            the charging (and discharging) speed of the long-term memory MBONs.
+        """
 
         self._cs_magnitude = cs_magnitude
         self._us_magnitude = us_magnitude
@@ -584,7 +608,8 @@ class IncentiveCircuit(MushroomBody):
         self._prs, self._pre = 2, 4  # r-MBONs
         self._pms, self._pme = 4, 6  # m-MBONs
 
-        super().__init__(*args, **kwargs)
+        super().__init__(nb_cs=nb_cs, nb_us=nb_us, nb_kc=nb_kc, nb_apl=nb_apl, nb_dan=nb_dan, nb_mbon=nb_mbon,
+                         learning_rule=learning_rule, *args, **kwargs)
 
         self.us_names = ["punishment", "reward"]
         self.cs_names = ["A", "B"]
@@ -668,6 +693,9 @@ class IncentiveCircuit(MushroomBody):
 
     @property
     def memory_charging_speed(self):
+        """
+        the charging (and discharging) speed of the long-term memory MBONs.
+        """
         return self._memory_charging_speed
 
     def __repr__(self):
@@ -678,14 +706,27 @@ class IncentiveCircuit(MushroomBody):
 
 
 class IncentiveWheel(IncentiveCircuit):
-    def __init__(self, *args, **kwargs):
-        kwargs.setdefault('nb_cs', 8)
-        kwargs.setdefault('nb_us', 8)
-        kwargs.setdefault('nb_kc', 40)
-        kwargs.setdefault('nb_apl', 0)
-        kwargs.setdefault('nb_dan', 16)
-        kwargs.setdefault('nb_mbon', 16)
-        kwargs.setdefault('learning_rule', dopaminergic)
+    def __init__(self, nb_cs=8, nb_us=8, nb_kc=40, nb_apl=0, nb_dan=16, nb_mbon=16, learning_rule=dopaminergic,
+                 *args, **kwargs):
+        """
+        The Incentive Wheel is an extension of the Incentive Circuit and more complete model of the Mushroom Body that
+        encodes the memory dynamics of model related with the susceptible, restrained and lont-term memory MBONs. It
+        contains MBON-DAN and MBON-MBON feedback connections similarly to the Incentive Circuit, but it also connects
+        different incentive circuits that share MBONs with different roles. This model was first presented in
+        Gkanias et al (2021).
+
+        Parameters
+        ----------
+        nb_cs
+        nb_us
+        nb_kc
+        nb_apl
+        nb_dan
+        nb_mbon
+        learning_rule
+        args
+        kwargs
+        """
 
         self._pds, self._pde = 0, 8  # d-DANs
         self._pcs, self._pce = 8, 16  # c-DANs
@@ -694,7 +735,8 @@ class IncentiveWheel(IncentiveCircuit):
         self._prs, self._pre = 8, 16  # r-MBONs
         self._pms, self._pme = 8, 16  # m-MBONs
 
-        super(IncentiveWheel, self).__init__(*args, **kwargs)
+        super(IncentiveWheel, self).__init__(nb_cs=nb_cs, nb_us=nb_us, nb_kc=nb_kc, nb_apl=nb_apl, nb_dan=nb_dan,
+                                             nb_mbon=nb_mbon, learning_rule=learning_rule, *args, **kwargs)
 
         self.us_names = ["friendly", "predator", "unexpected", "failure",
                          "abominable", "enemy", "new territory", "posses"]
@@ -707,6 +749,10 @@ class IncentiveWheel(IncentiveCircuit):
 
 class SusceptibleMemory(IncentiveCircuit):
     def __init__(self, *args, **kwargs):
+        """
+        The Susceptible Memory is a sub-circuit of the Incentive Circuit that has only susceptible MBONs and discharging
+        DANs. This model was first presented in Gkanias et al (2021).
+        """
         kwargs.setdefault('ltm_charging_speed', 0.5)
         super().__init__(*args, **kwargs)
 
@@ -741,6 +787,10 @@ class SusceptibleMemory(IncentiveCircuit):
 
 class RestrainedMemory(IncentiveCircuit):
     def __init__(self, *args, **kwargs):
+        """
+        The Restrained Memory is a sub-circuit of the Incentive Circuit that has only susceptible and restrained MBONs
+        and discharging DANs. This model was first presented in Gkanias et al (2021).
+        """
         kwargs.setdefault('ltm_charging_speed', 0.5)
         super().__init__(*args, **kwargs)
 
@@ -775,6 +825,10 @@ class RestrainedMemory(IncentiveCircuit):
 
 class LongTermMemory(IncentiveCircuit):
     def __init__(self, *args, **kwargs):
+        """
+        The Long-term Memory is a sub-circuit of the Incentive Circuit that has only long-term memory MBONs
+        and charging DANs. This model was first presented in Gkanias et al (2021).
+        """
         kwargs.setdefault('ltm_charging_speed', 0.5)
         super().__init__(*args, **kwargs)
 
@@ -809,6 +863,10 @@ class LongTermMemory(IncentiveCircuit):
 
 class ReciprocalRestrainedMemories(IncentiveCircuit):
     def __init__(self, *args, **kwargs):
+        """
+        The Reciprocal Restrained Memories is a sub-circuit of the Incentive Circuit that has only restrained MBONs and
+        charging DANs. This model was first presented in Gkanias et al (2021).
+        """
         kwargs.setdefault('ltm_charging_speed', 0.5)
         super().__init__(*args, **kwargs)
 
@@ -843,6 +901,10 @@ class ReciprocalRestrainedMemories(IncentiveCircuit):
 
 class ReciprocalForgettingMemories(IncentiveCircuit):
     def __init__(self, *args, **kwargs):
+        """
+        The Reciprocal Forgetting Memories is a sub-circuit of the Incentive Circuit that has only long-term memory
+        MBONs and forgetting DANs. This model was first presented in Gkanias et al (2021).
+        """
         kwargs.setdefault('ltm_charging_speed', 0.5)
         super().__init__(*args, **kwargs)
 
@@ -878,6 +940,10 @@ class ReciprocalForgettingMemories(IncentiveCircuit):
 
 class MemoryAssimilationMechanism(IncentiveCircuit):
     def __init__(self, *args, **kwargs):
+        """
+        The Memory Assimilation Mechanism is a sub-circuit of the Incentive Circuit that has only restrained and
+        long-term memory MBONs and charging and forgetting DANs. This model was first presented in Gkanias et al (2021).
+        """
         kwargs.setdefault('ltm_charging_speed', 0.5)
         super().__init__(*args, **kwargs)
 

@@ -1,3 +1,11 @@
+"""
+Central Complex (CX) models of the insect brain.
+
+References:
+    Stone, T. et al. An Anatomically Constrained Model for Path Integration in the Bee Brain.
+    Curr Biol 27, 3069-3085.e11 (2017).
+"""
+
 __author__ = "Evripidis Gkanias"
 __copyright__ = "Copyright (c) 2021, Insect Robotics Group," \
                 "Institude of Perception, Action and Behaviour," \
@@ -29,20 +37,49 @@ with open(os.path.join(__root__, 'data', 'cx.yaml'), 'rb') as f:
 class CentralComplex(Component):
 
     def __init__(self, nb_tb1=8, nb_tn1=2, nb_tn2=2, nb_cl1=16, nb_tl2=16, nb_cpu4=16, nb_cpu1a=14, nb_cpu1b=2,
-                 tn_prefs=np.pi/4, gain=0.05, noise=.0, pontin=False, *args, **kwargs):
+                 tn_prefs=np.pi/4, gain=0.05, pontin=False, *args, **kwargs):
+        """
+        The Central Complex model of Tomas Stone (Stone et al, 2017) as a component of the locust brain.
+
+        Parameters
+        ----------
+        nb_tb1: int
+            the number of TB1 neurons.
+        nb_tn1: int
+            the number of TN1 neurons.
+        nb_tn2: int
+            the number of TN2 neurons.
+        nb_cl1: int
+            the number of CL1 neurons.
+        nb_tl2: int
+            the number of TL2 neurons.
+        nb_cpu4: int
+            the number of CPU4 neurons.
+        nb_cpu1a: int
+            the number of CPU1a neurons.
+        nb_cpu1b: int
+            the number of CPU1b neurons.
+        tn_prefs: float
+            the angular offset of preference of the TN neurons from the front direction.
+        gain: float
+            the gain if used as charging speed for the memory.
+        pontin: bool
+            whether to include a pontin neuron in the circuit or not. Default is False.
+        """
 
         kwargs.setdefault('nb_input', nb_tb1 + nb_tn1 + nb_tn2)
         kwargs.setdefault('nb_output', nb_cpu1a + nb_cpu1b)
         kwargs.setdefault('learning_rule', None)
         super(CentralComplex, self).__init__(*args, **kwargs)
 
+        # set-up the learning speed
         if pontin:
             gain *= 5e-03
         self._gain = gain
 
+        # set-up parameters
         self.tn_prefs = tn_prefs
         self.smoothed_flow = 0.
-        self.noise = noise
         self.pontin = pontin
 
         self._nb_tl2 = nb_tl2
@@ -54,6 +91,7 @@ class CentralComplex(Component):
         self._nb_cpu1a = nb_cpu1a
         self._nb_cpu1b = nb_cpu1b
 
+        # initialise the responses of the neurons
         self._tl2 = np.zeros(self.nb_tl2)
         self._cl1 = np.zeros(self.nb_cl1)
         self._tb1 = np.zeros(self.nb_tb1)
@@ -123,12 +161,12 @@ class CentralComplex(Component):
         self._motor_slope = 1.0
         self._pontin_slope = 5.0
 
-        self.f_tl2 = lambda v: sigmoid(v * self._tl2_slope - self.b_tl2, noise=self.noise, rng=self.rng)
-        self.f_cl1 = lambda v: sigmoid(v * self._cl1_slope - self.b_cl1, noise=self.noise, rng=self.rng)
-        self.f_tb1 = lambda v: sigmoid(v * self._tb1_slope - self.b_tb1, noise=self.noise, rng=self.rng)
-        self.f_cpu4 = lambda v: sigmoid(v * self._cpu4_slope - self.b_cpu4, noise=self.noise, rng=self.rng)
-        self.f_pontin = lambda v: sigmoid(v * self._pontin_slope - self.b_pontin, noise=self.noise, rng=self.rng)
-        self.f_cpu1 = lambda v: sigmoid(v * self._cpu1_slope - self.b_cpu1, noise=self.noise, rng=self.rng)
+        self.f_tl2 = lambda v: sigmoid(v * self._tl2_slope - self.b_tl2, noise=self._noise, rng=self.rng)
+        self.f_cl1 = lambda v: sigmoid(v * self._cl1_slope - self.b_cl1, noise=self._noise, rng=self.rng)
+        self.f_tb1 = lambda v: sigmoid(v * self._tb1_slope - self.b_tb1, noise=self._noise, rng=self.rng)
+        self.f_cpu4 = lambda v: sigmoid(v * self._cpu4_slope - self.b_cpu4, noise=self._noise, rng=self.rng)
+        self.f_pontin = lambda v: sigmoid(v * self._pontin_slope - self.b_pontin, noise=self._noise, rng=self.rng)
+        self.f_cpu1 = lambda v: sigmoid(v * self._cpu1_slope - self.b_cpu1, noise=self._noise, rng=self.rng)
 
         self.reset()
 
@@ -238,6 +276,20 @@ class CentralComplex(Component):
     def get_flow(self, heading, velocity, filter_steps=0):
         """
         Calculate optic flow depending on preference angles. [L, R]
+
+        Parameters
+        ----------
+        heading: float
+            the heading direction in radians.
+        velocity: np.ndarray
+            the 2D linear velocity.
+        filter_steps: int
+            the number of steps as a smoothing parameter for the filter
+
+        Returns
+        -------
+        flow: np.ndarray
+            the estimated optic flow from both eyes [L, R]
         """
         A = tn_axes(heading, self.tn_prefs)
         flow = velocity.dot(A)
@@ -250,6 +302,19 @@ class CentralComplex(Component):
         return flow
 
     def phi2tl2(self, phi):
+        """
+        Transform the heading direction to the TL2 responses.
+
+        Parameters
+        ----------
+        phi: float
+            the feading direction in radiance.
+
+        Returns
+        -------
+        r_tl2: np.ndarray
+            the TL2 responses based on their preference angle
+        """
         return np.cos(phi - self.tl2_prefs)
 
     def flow2tn1(self, flow):
@@ -258,13 +323,16 @@ class CentralComplex(Component):
 
         Parameters
         ----------
-        flow
+        flow: np.ndarray
+            the [L, R] optic flow
 
         Returns
         -------
+        r_tn1: np.ndarray
+            the responses of the TN1 neurons
 
         """
-        return np.clip((1. - flow) / 2. + self.rng.normal(scale=self.noise, size=flow.shape), 0, 1)
+        return np.clip((1. - flow) / 2. + self.rng.normal(scale=self._noise, size=flow.shape), 0, 1)
 
     def flow2tn2(self, flow):
         """
@@ -272,16 +340,21 @@ class CentralComplex(Component):
 
         Parameters
         ----------
-        flow
+        flow: np.ndarray
+            the [L, R] optic flow
 
         Returns
         -------
-
+        r_tn2: np.ndarray
+            the responses of the TN2 neurons
         """
         return np.clip(flow, 0, 1)
 
     @property
     def w_tl22cl1(self):
+        """
+        The TL2 to CL1 synaptic weights.
+        """
         return self._w_tl22cl1
 
     @w_tl22cl1.setter
@@ -290,6 +363,9 @@ class CentralComplex(Component):
 
     @property
     def w_cl12tb1(self):
+        """
+        The CL1 to TB1 synaptic weights.
+        """
         return self._w_cl12tb1
 
     @w_cl12tb1.setter
@@ -298,6 +374,9 @@ class CentralComplex(Component):
 
     @property
     def w_tb12tb1(self):
+        """
+        The TB1 to TB1 synaptic weights.
+        """
         return self._w_tb12tb1
 
     @w_tb12tb1.setter
@@ -306,6 +385,9 @@ class CentralComplex(Component):
 
     @property
     def w_tb12cpu4(self):
+        """
+        The TB1 to CPU4 synaptic weights.
+        """
         return self._w_tb12cpu4
 
     @w_tb12cpu4.setter
@@ -314,6 +396,9 @@ class CentralComplex(Component):
 
     @property
     def w_tn22cpu4(self):
+        """
+        The TN2 to CPU4 synaptic weights.
+        """
         return self._w_tn22cpu4
 
     @w_tn22cpu4.setter
@@ -322,6 +407,9 @@ class CentralComplex(Component):
 
     @property
     def w_tb12cpu1a(self):
+        """
+        The TB1 to CPU1a synaptic weights.
+        """
         return self._w_tb12cpu1a
 
     @w_tb12cpu1a.setter
@@ -330,6 +418,9 @@ class CentralComplex(Component):
 
     @property
     def w_tb12cpu1b(self):
+        """
+        The TB1 to CPU1b synaptic weights.
+        """
         return self._w_tb12cpu1b
 
     @w_tb12cpu1b.setter
@@ -338,6 +429,9 @@ class CentralComplex(Component):
 
     @property
     def w_cpu42cpu1a(self):
+        """
+        The CPU4 to CPU1a synaptic weights.
+        """
         return self._w_cpu42cpu1a
 
     @w_cpu42cpu1a.setter
@@ -346,6 +440,9 @@ class CentralComplex(Component):
 
     @property
     def w_cpu42cpu1b(self):
+        """
+        The CPU4 to CPU1b synaptic weights.
+        """
         return self._w_cpu42cpu1b
 
     @w_cpu42cpu1b.setter
@@ -354,6 +451,9 @@ class CentralComplex(Component):
 
     @property
     def w_cpu1a2motor(self):
+        """
+        Matrix transforming the CPU1a responses to their contribution to the motor commands.
+        """
         return self._w_cpu1a2motor
 
     @w_cpu1a2motor.setter
@@ -362,6 +462,9 @@ class CentralComplex(Component):
 
     @property
     def w_cpu1b2motor(self):
+        """
+        Matrix transforming the CPU1b responses to their contribution to the motor commands.
+        """
         return self._w_cpu1b2motor
 
     @w_cpu1b2motor.setter
@@ -370,6 +473,9 @@ class CentralComplex(Component):
 
     @property
     def w_pontin2cpu1a(self):
+        """
+        The pontin to CPU1a synaptic weights.
+        """
         return self._w_pontin2cpu1a
 
     @w_pontin2cpu1a.setter
@@ -378,6 +484,9 @@ class CentralComplex(Component):
 
     @property
     def w_pontin2cpu1b(self):
+        """
+        The pontin to CPU1b synaptic weights.
+        """
         return self._w_pontin2cpu1b
 
     @w_pontin2cpu1b.setter
@@ -386,6 +495,9 @@ class CentralComplex(Component):
 
     @property
     def w_cpu42pontin(self):
+        """
+        The CPU4 to pontin synaptic weights.
+        """
         return self._w_cpu42pontin
 
     @w_cpu42pontin.setter
@@ -394,34 +506,58 @@ class CentralComplex(Component):
 
     @property
     def b_tl2(self):
+        """
+        The TL2 rest response rate (bias).
+        """
         return self._b_tl2
 
     @property
     def b_cl1(self):
+        """
+        The CL1 rest response rate (bias).
+        """
         return self._b_cl1
 
     @property
     def b_tb1(self):
+        """
+        The TB1 rest response rate (bias).
+        """
         return self._b_tb1
 
     @property
     def b_cpu4(self):
+        """
+        The CPU4 rest response rate (bias).
+        """
         return self._b_cpu4
 
     @property
     def b_cpu1(self):
+        """
+        The CPU1 rest response rate (bias).
+        """
         return self._b_cpu1
 
     @property
     def b_motor(self):
+        """
+        The motor bias.
+        """
         return self._b_motor
 
     @property
     def b_pontin(self):
+        """
+        The pontin rest response rate (bias).
+        """
         return self._b_pontin
 
     @property
     def r_tb1(self):
+        """
+        The TB1 response rate.
+        """
         return self._tb1
 
     @r_tb1.setter
@@ -430,10 +566,16 @@ class CentralComplex(Component):
 
     @property
     def nb_tb1(self):
+        """
+        The number TB1 neurons.
+        """
         return self._nb_tb1
 
     @property
     def r_tl2(self):
+        """
+        The TL2 response rate.
+        """
         return self._tl2
 
     @r_tl2.setter
@@ -442,10 +584,16 @@ class CentralComplex(Component):
 
     @property
     def nb_tl2(self):
+        """
+        The number TL2 neurons.
+        """
         return self._nb_tl2
 
     @property
     def r_cl1(self):
+        """
+        The CL1 response rate.
+        """
         return self._cl1
 
     @r_cl1.setter
@@ -454,10 +602,16 @@ class CentralComplex(Component):
 
     @property
     def nb_cl1(self):
+        """
+        The number CL1 neurons.
+        """
         return self._nb_cl1
 
     @property
     def r_tn1(self):
+        """
+        The TN1 response rate.
+        """
         return self._tn1
 
     @r_tn1.setter
@@ -466,10 +620,16 @@ class CentralComplex(Component):
 
     @property
     def nb_tn1(self):
+        """
+        The number TN1 neurons.
+        """
         return self._nb_tn1
 
     @property
     def r_tn2(self):
+        """
+        The TN2 response rate.
+        """
         return self._tn2
 
     @r_tn2.setter
@@ -478,10 +638,16 @@ class CentralComplex(Component):
 
     @property
     def nb_tn2(self):
+        """
+        The number TN2 neurons.
+        """
         return self._nb_tn2
 
     @property
     def r_cpu4(self):
+        """
+        The CPU4 response rate.
+        """
         return self._cpu4
 
     @r_cpu4.setter
@@ -490,22 +656,37 @@ class CentralComplex(Component):
 
     @property
     def cpu4_mem(self):
+        """
+        The CPU4 memory.
+        """
         return self.__cpu4
 
     @property
     def nb_cpu4(self):
+        """
+        The number CPU4 neurons.
+        """
         return self._nb_cpu4
 
     @property
     def nb_cpu1a(self):
+        """
+        The number CPU1a neurons.
+        """
         return self._nb_cpu1a
 
     @property
     def nb_cpu1b(self):
+        """
+        The number CPU1b neurons.
+        """
         return self._nb_cpu1b
 
     @property
     def r_cpu1(self):
+        """
+        The CPU1 response rate.
+        """
         return self._cpu1
 
     @r_cpu1.setter
@@ -514,4 +695,7 @@ class CentralComplex(Component):
 
     @property
     def nb_cpu1(self):
+        """
+        The number CPU1 neurons.
+        """
         return self._nb_cpu1a + self._nb_cpu1b

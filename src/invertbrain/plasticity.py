@@ -1,5 +1,17 @@
 """
 Package that contains some predefined plasticity (learning) rules.
+
+References:
+    [1] Rescorla, R. A. & Wagner, A. R. A theory of Pavlovian conditioning: Variations in the effectiveness of reinforcement
+    and nonreinforcement. in 64–99 (Appleton-Century-Crofts, 1972).
+
+
+    [2] Hebb, D. O. The organization of behavior: A neuropsychological theory. (Psychology Press, 2005).
+
+
+    [3] Smith, D., Wessnitzer, J. & Webb, B. A model of associative learning in the mushroom body. Biol Cybern 99,
+    89–103 (2008).
+
 """
 
 __author__ = "Evripidis Gkanias"
@@ -17,18 +29,75 @@ __init_dir__ = set(dir()) | {'__init_dir__'}
 
 
 def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
-    # When DAN > 0 and KC > W - W_rest increase the weight (if DAN < 0 it is reversed)
-    # When DAN > 0 and KC < W - W_rest decrease the weight (if DAN < 0 it is reversed)
-    # When DAN = 0 no learning happens
+    """
+    The dopaminergic learning rule introduced in Gkanias et al (2021). Reinforcement here is assumed to be the
+    dopaminergic factor.
+
+        dw/dt = rein * [r_pre + w(t) - w_rest) / tau
+
+        tau = 1 / learning_rate
+
+    When DAN > 0 and KC > W - W_rest increase the weight (if DAN < 0 it is reversed).
+    When DAN > 0 and KC < W - W_rest decrease the weight (if DAN < 0 it is reversed).
+    When DAN = 0 no learning happens.
+
+    Parameters
+    ----------
+    w: np.ndarray
+        the current synaptic weights.
+    r_pre: np.ndarray
+        the pre-synaptic responses.
+    r_post: np.ndarray
+        the post-synaptic responses.
+    rein: np.ndarray
+        the dopaminergic factor.
+    learning_rate: float
+        the learning rate.
+    w_rest: np.ndarray | float
+        the resting value for the synaptic weights.
+
+    Returns
+    -------
+    w': np.ndarray
+        the updated synaptic weights
+    """
     dop_fact = rein[np.newaxis, ...]
     r_pre = r_pre[..., np.newaxis]
     return w + learning_rate * dop_fact * (r_pre + w - w_rest)
 
 
 def prediction_error(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
-    # When KC > 0 and DAN > W - W_rest increase the weight (if KC < 0 it is reversed)
-    # When KC > 0 and DAN < W - W_rest decrease the weight (if KC < 0 it is reversed)
-    # When KC = 0 no learning happens
+    """
+    The prediction-error learning rule introduced in Rescorla and Wagner (1972).
+
+        dw/dt = r_pre * [rein - r_post - w_rest) / tau
+
+        tau = 1 / learning_rate
+
+    When KC > 0 and DAN > W - W_rest increase the weight (if KC < 0 it is reversed).
+    When KC > 0 and DAN < W - W_rest decrease the weight (if KC < 0 it is reversed).
+    When KC = 0 no learning happens.
+
+    Parameters
+    ----------
+    w: np.ndarray
+        the current synaptic weights.
+    r_pre: np.ndarray
+        the pre-synaptic responses.
+    r_post: np.ndarray
+        the post-synaptic responses.
+    rein: np.ndarray
+        the reinforcement signal.
+    learning_rate: float
+        the learning rate.
+    w_rest: np.ndarray | float
+        the resting value for the synaptic weights.
+
+    Returns
+    -------
+    w': np.ndarray
+        the updated synaptic weights
+    """
     rein = rein[np.newaxis, ...]
     r_pre = r_pre[..., np.newaxis]
     r_post = r_post[np.newaxis, ...]
@@ -36,8 +105,36 @@ def prediction_error(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
 
 
 def hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
-    # When DAN > 0 and MBON > 0 increase the weight
-    # When DAN <= 0 no learning happens
+    """
+    The Hebbian learning rule introduced in Hebb (2005).
+
+        dw/dt = (rein * r_pre x r_post + w_rest) / tau
+
+        tau = 1 / learning_rate
+
+    When DAN > 0 and MBON > 0 increase the weight
+    When DAN <= 0 no learning happens
+
+    Parameters
+    ----------
+    w: np.ndarray
+        the current synaptic weights.
+    r_pre: np.ndarray
+        the pre-synaptic responses.
+    r_post: np.ndarray
+        the post-synaptic responses.
+    rein: np.ndarray
+        the reinforcement signal.
+    learning_rate: float
+        the learning rate.
+    w_rest: np.ndarray | float
+        the resting value for the synaptic weights.
+
+    Returns
+    -------
+    w': np.ndarray
+        the updated synaptic weights
+    """
     rein = rein[np.newaxis, ...]
     r_pre = r_pre[..., np.newaxis]
     r_post = r_post[np.newaxis, ...]
@@ -45,21 +142,74 @@ def hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
 
 
 def anti_hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
-    # When DAN > 0 and KC > 0 decrease the weight
-    # When DAN <= 0 no learning happens
+    """
+    The anti-Hebbian learning rule introduced in Smith (2008).
+
+        dw/dt = (-rein * r_pre x r_post + w_rest) / tau
+
+        tau = 1 / learning_rate
+
+    When DAN > 0 and KC > 0 decrease the weight.
+    When DAN <= 0 no learning happens.
+
+    Parameters
+    ----------
+    w: np.ndarray
+        the current synaptic weights.
+    r_pre: np.ndarray
+        the pre-synaptic responses.
+    r_post: np.ndarray
+        the post-synaptic responses.
+    rein: np.ndarray
+        the reinforcement signal.
+    learning_rate: float
+        the learning rate.
+    w_rest: np.ndarray | float
+        the resting value for the synaptic weights.
+
+    Returns
+    -------
+    w': np.ndarray
+        the updated synaptic weights
+    """
     rein = np.maximum(rein[np.newaxis, ...], 0)
     r_pre = r_pre[..., np.newaxis]
     return w + learning_rate * (-rein * (r_pre * w) + w_rest)
 
 
 __learning_rules__ = set(dir()) - __init_dir__
+"""
+Names of all the learning rules in this package. 
+"""
 
 
 def get_available_learning_rules():
+    """
+    Returns a list with the all the predefined learning rules that are available for use.
+
+    Returns
+    -------
+    lrs: list
+        a list with the names of all the available learning rules.
+
+    """
     return list(__learning_rules__)
 
 
 def get_learning_rule(learning_rule_name):
+    """
+    Transforms the name of a learning rule into the respective function if its implementation exists.
+
+    Parameters
+    ----------
+    learning_rule_name: str
+        the name of the learning rule.
+
+    Returns
+    -------
+    learning_rule: callable
+        the function of the learning rule as a callable.
+    """
     if learning_rule_name in get_available_learning_rules():
         return eval(learning_rule_name)
     else:

@@ -1,3 +1,7 @@
+"""
+Helper functions for the Central Complex. Includes helpful optic flow transformations.
+"""
+
 __author__ = "Evripidis Gkanias"
 __copyright__ = "Copyright (c) 2021, Insect Robotics Group," \
                 "Institude of Perception, Action and Behaviour," \
@@ -12,13 +16,22 @@ import numpy as np
 
 def image_motion_flow(velocity, v_heading, r_sensor):
     """
-    :param velocity: translation (velocity - 3D)
-    :type velocity: np.ndarray
-    :param v_heading: agent heading direction (3D vector)
-    :type v_heading: np.ndarray
-    :param r_sensor: relative directions of sensors on the agent (3D vectors)
-    :type r_sensor: np.ndarray
     Calculate optic flow based on movement.
+
+    Parameters
+    ----------
+    velocity: np.ndarray
+        translation (velocity - 3D).
+    v_heading: np.ndarray
+        agent heading direction (3D vector).
+    r_sensor: np.ndarray
+        relative directions of sensors on the agent (3D vectors).
+
+    Returns
+    -------
+    flow: np.ndarray
+        the optic flow.
+
     """
     flow = velocity - (r_sensor.T * velocity.dot(r_sensor.T)).T
     flow -= rotary_flow(v_heading, r_sensor)
@@ -27,23 +40,39 @@ def image_motion_flow(velocity, v_heading, r_sensor):
 
 def rotary_flow(v_heading, r_sensor):
     """
-    Clockwise rotation
-    :param v_heading: agent heading direction (3D vector)
-    :type v_heading: np.ndarray
-    :param r_sensor: relative directions of sensors on the agent (3D vectors)
-    :type r_sensor: np.ndarray
-    :return:
+    Clockwise rotation.
+
+    Parameters
+    ----------
+    v_heading: np.ndarray
+        agent heading direction (3D vector).
+    r_sensor: np.ndarray
+        relative directions of sensors on the agent (3D vectors).
+
+    Returns
+    -------
+    flow: np.ndarray
+        the 3D optic flow based on rotation.
+
     """
     return np.cross(v_heading, r_sensor)
 
 
 def translatory_flow(r_sensor, r_pref):
     """
-    :param r_sensor: relative directions of sensors on the agent (3D vectors)
-    :type r_sensor: np.ndarray
-    :param r_pref: agent's preferred direction
-    :type r_pref: np.ndarray
-    :return:
+
+    Parameters
+    ----------
+    r_sensor: np.ndarray
+        relative directions of sensors on the agent (3D vectors)
+    r_pref: np.ndarray
+        agent's preferred direction
+
+    Returns
+    -------
+    flow: np.ndarray
+        the 3D optic flow based on translation.
+
     """
     return np.cross(np.cross(r_sensor, r_pref), r_sensor)
 
@@ -51,20 +80,42 @@ def translatory_flow(r_sensor, r_pref):
 def linear_range_model(t_flow, r_flow, w=1., n=0.):
     """
     Eq 5 in Franz & Krapp
-    :param t_flow: translatory flow (wrt preferred direction)
-    :type t_flow: np.ndarray
-    :param r_flow: image motion flow
-    :type r_flow: np.ndarray
-    :param w: weight
-    :type w: float
-    :param n: noise
-    :type n: float
-    :return:
+
+    Parameters
+    ----------
+    t_flow: np.ndarray
+        translatory flow (wrt preferred direction).
+    r_flow: np.ndarray
+        image motion flow.
+    w: float
+        weight.
+    n: float
+        noise.
+
+    Returns
+    -------
+
     """
     return w * ((t_flow * r_flow).sum(axis=1) + n).sum()
 
 
 def tn_axes(heading, tn_prefs=np.pi/4):
+    """
+    Create the axes of the TN neurons.
+
+    Parameters
+    ----------
+    heading: float
+        the heading direction (yaw) of the agent.
+    tn_prefs: float
+        the preference angles of the TN neurons.
+
+    Returns
+    -------
+    axes: np.ndarray
+        the TN axes.
+
+    """
     return np.array([[np.sin(heading - tn_prefs), np.cos(heading - tn_prefs)],
                      [np.sin(heading + tn_prefs), np.cos(heading + tn_prefs)]])
 
@@ -74,6 +125,19 @@ def get_flow(heading, velocity, r_sensors):
     This is the longwinded version that does all the flow calculations,
     piece by piece. It can be refactored down to flow2() so use that for
     performance benefit.
+
+    Parameters
+    ----------
+    heading: float
+        the heading (azimuth) direction of the agent.
+    velocity: np.ndarray
+        the 2D velocity of the agent.
+    r_sensors: np.ndarray
+        relative directions of sensors on the agent (3D vectors).
+
+    Returns
+    -------
+
     """
     translation = np.append(velocity, np.zeros(1))
     rotation = np.zeros(3)
