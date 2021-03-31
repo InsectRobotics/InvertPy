@@ -1,5 +1,9 @@
 """
 The Compass models of the insect brain.
+
+References:
+    .. [1] Gkanias, E., Risse, B., Mangan, M. & Webb, B. From skylight input to behavioural output: a computational model
+       of the insect polarised light compass. PLoS Comput Biol 15, e1007123 (2019).
 """
 
 __author__ = "Evripidis Gkanias"
@@ -38,7 +42,7 @@ class CelestialCompass(Compass):
     def __init__(self, nb_pol, loc_ori, nb_sol=8, nb_tcl=None, sigma=13, shift=40, dt=2./60, degrees=True,
                  integrated=False, has_pol=True, has_sun=True, has_circadian=False, *args, **kwargs):
         """
-        The Celestial Compass integrated a polarisation compass and a sky gradient compass.
+        The Celestial Compass integrated a polarisation compass and a sky gradient compass presented in [1]_.
 
         Parameters
         ----------
@@ -47,26 +51,31 @@ class CelestialCompass(Compass):
         loc_ori: R
             the orientation of the ommatidia (relative to the eye orientation). They are used in order to calculate the
             synaptic weights mapping the eye view to an internal representation.
-        nb_sol: int
+        nb_sol: int, optional
             the number of SOL (direction relative to the sun) units.
-        nb_tcl: int
+        nb_tcl: int, optional
             the number of TCL (direction relative to North) units.
-        sigma: float
+        sigma: float, optional
             the angular thickness of the tilt compensation gate function's ring.
-        shift: float
+        shift: float, optional
             the angular radius of the tilt compensation gate function's ring from the zenith.
-        dt: float
+        dt: float, optional
             the how often do we do updates.
-        degrees: bool
+        degrees: bool, optional
             whether the input angles are in degrees or not.
-        integrated: bool
+        integrated: bool, optional
             whether the model produces directly the TCL output from the POL input or though the SOL neurons.
-        has_pol: bool
+        has_pol: bool, optional
             whether the compass has a polarisation compass.
-        has_sun: bool
+        has_sun: bool, optional
             whether the compass has a solar compass.
-        has_circadian: bool
+        has_circadian: bool, optional
             whether the compass has a circadian mechanism and compensates for the moving sun.
+
+        Notes
+        -----
+        .. [1] Gkanias, E., Risse, B., Mangan, M. & Webb, B. From skylight input to behavioural output: a computational model
+           of the insect polarised light compass. PLoS Comput Biol 15, e1007123 (2019).
         """
         super().__init__(nb_pol, nb_tcl, *args, **kwargs)
 
@@ -184,7 +193,7 @@ class CelestialCompass(Compass):
 
         return r_tcl
 
-    def gate(self, glob_ori: R, order=1.):
+    def gate(self, glob_ori, order=1.):
         """
         The tilt compensation mechanism is a set of responses that gate the synaptic weights from the POl neurons to
         the SOL neurons (or directly to the TCL neurons).
@@ -193,7 +202,7 @@ class CelestialCompass(Compass):
         ----------
         glob_ori: R
             the global orientation of the ommatidia
-        order: float
+        order: float, optional
             the order of steepness of the Gaussian
 
         Returns
@@ -259,7 +268,7 @@ class CelestialCompass(Compass):
 
         Parameters
         ----------
-        pref_in: np.ndarray
+        pref_in: np.ndarray, optional
             the preference angles of the input layer for the absolute case.
 
         Returns
@@ -473,11 +482,11 @@ def photoreceptor2pol(r, ori=None, ori_cross=None, dtype='float32'):
     ----------
     r: np.ndarray
         the input from the photo-receptors.
-    ori: R
+    ori: R, optional
         the orientation of the ommatidia.
-    ori_cross: np.ndarray
+    ori_cross: np.ndarray, optional
         the angle of preference for each photo-receptor with respect to the orientation of each ommatidium
-    dtype: np.dtype | str
+    dtype: np.dtype, optional
         the type of the data
 
     Returns
@@ -490,7 +499,7 @@ def photoreceptor2pol(r, ori=None, ori_cross=None, dtype='float32'):
     return r_op / (r_po + eps)
 
 
-def photoreceptor2opponent(r, ori: R = None, ori_cross: np.ndarray = None, dtype='float32'):
+def photoreceptor2opponent(r, ori=None, ori_cross=None, dtype='float32'):
     """
     Transforms the input from the photo-receptors into opponent (OP) neurons responses.
 
@@ -498,11 +507,11 @@ def photoreceptor2opponent(r, ori: R = None, ori_cross: np.ndarray = None, dtype
     ----------
     r: np.ndarray
         the input from the photo-receptors.
-    ori: R
+    ori: R, optional
         the orientation of the ommatidia.
-    ori_cross: np.ndarray
+    ori_cross: np.ndarray, optional
         the angle of preference for each photo-receptor with respect to the orientation of each ommatidium
-    dtype: np.dtype | str
+    dtype: np.dtype, optional
         the type of the data
 
     Returns
@@ -542,9 +551,9 @@ def ori2cross(nb_ommatidia, nb_receptors=2, dtype='float32'):
     ----------
     nb_ommatidia: int
         the number of ommatidia.
-    nb_receptors: int
+    nb_receptors: int, optional
         the number of photo-receptors per ommatidium.
-    dtype: np.dtype | str
+    dtype: np.dtype, optional
         the data type.
 
     Returns
@@ -569,7 +578,7 @@ def encode_sph(theta, phi=None, length=8):
         the zenith angle of the point(s).
     phi: float | np.ndarray
         the azimuth of the point(s).
-    length: int
+    length: int, optional
         the size of the output population (array).
 
     Returns
@@ -602,7 +611,6 @@ def decode_sph(I):
     -------
     theta, phi: np.ndarray
         the spherical coordinates calculated using the input population codes.
-
     """
     fund_freq = np.fft.fft(I)[1]
     phi = (np.pi - np.angle(np.conj(fund_freq))) % (2 * np.pi) - np.pi

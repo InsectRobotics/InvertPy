@@ -2,8 +2,8 @@
 Central Complex (CX) models of the insect brain.
 
 References:
-    Stone, T. et al. An Anatomically Constrained Model for Path Integration in the Bee Brain.
-    Curr Biol 27, 3069-3085.e11 (2017).
+    .. [1] Stone, T. et al. An Anatomically Constrained Model for Path Integration in the Bee Brain.
+       Curr Biol 27, 3069-3085.e11 (2017).
 """
 
 __author__ = "Evripidis Gkanias"
@@ -39,32 +39,37 @@ class CentralComplex(Component):
     def __init__(self, nb_tb1=8, nb_tn1=2, nb_tn2=2, nb_cl1=16, nb_tl2=16, nb_cpu4=16, nb_cpu1a=14, nb_cpu1b=2,
                  tn_prefs=np.pi/4, gain=0.05, pontin=False, *args, **kwargs):
         """
-        The Central Complex model of Tomas Stone (Stone et al, 2017) as a component of the locust brain.
+        The Central Complex model of [1]_ as a component of the locust brain.
 
         Parameters
         ----------
-        nb_tb1: int
+        nb_tb1: int, optional
             the number of TB1 neurons.
-        nb_tn1: int
+        nb_tn1: int, optional
             the number of TN1 neurons.
-        nb_tn2: int
+        nb_tn2: int, optional
             the number of TN2 neurons.
-        nb_cl1: int
+        nb_cl1: int, optional
             the number of CL1 neurons.
-        nb_tl2: int
+        nb_tl2: int, optional
             the number of TL2 neurons.
-        nb_cpu4: int
+        nb_cpu4: int, optional
             the number of CPU4 neurons.
-        nb_cpu1a: int
+        nb_cpu1a: int, optional
             the number of CPU1a neurons.
-        nb_cpu1b: int
+        nb_cpu1b: int, optional
             the number of CPU1b neurons.
-        tn_prefs: float
+        tn_prefs: float, optional
             the angular offset of preference of the TN neurons from the front direction.
-        gain: float
+        gain: float, optional
             the gain if used as charging speed for the memory.
-        pontin: bool
+        pontin: bool, optional
             whether to include a pontin neuron in the circuit or not. Default is False.
+
+        Notes
+        -----
+        .. [1] Stone, T. et al. An Anatomically Constrained Model for Path Integration in the Bee Brain.
+           Curr Biol 27, 3069-3085.e11 (2017).
         """
 
         kwargs.setdefault('nb_input', nb_tb1 + nb_tn1 + nb_tn2)
@@ -283,7 +288,7 @@ class CentralComplex(Component):
             the heading direction in radians.
         velocity: np.ndarray
             the 2D linear velocity.
-        filter_steps: int
+        filter_steps: int, optional
             the number of steps as a smoothing parameter for the filter
 
         Returns

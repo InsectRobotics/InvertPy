@@ -87,9 +87,9 @@ def linear_range_model(t_flow, r_flow, w=1., n=0.):
         translatory flow (wrt preferred direction).
     r_flow: np.ndarray
         image motion flow.
-    w: float
+    w: float, optional
         weight.
-    n: float
+    n: float, optional
         noise.
 
     Returns
@@ -107,14 +107,13 @@ def tn_axes(heading, tn_prefs=np.pi/4):
     ----------
     heading: float
         the heading direction (yaw) of the agent.
-    tn_prefs: float
+    tn_prefs: float, optional
         the preference angles of the TN neurons.
 
     Returns
     -------
     axes: np.ndarray
         the TN axes.
-
     """
     return np.array([[np.sin(heading - tn_prefs), np.cos(heading - tn_prefs)],
                      [np.sin(heading + tn_prefs), np.cos(heading + tn_prefs)]])

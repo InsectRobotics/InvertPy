@@ -2,16 +2,15 @@
 Package that contains some predefined plasticity (learning) rules.
 
 References:
-    [1] Rescorla, R. A. & Wagner, A. R. A theory of Pavlovian conditioning: Variations in the effectiveness of reinforcement
-    and nonreinforcement. in 64–99 (Appleton-Century-Crofts, 1972).
+    .. [1] Rescorla, R. A. & Wagner, A. R. A theory of Pavlovian conditioning: Variations in the effectiveness of reinforcement
+       and nonreinforcement. in 64–99 (Appleton-Century-Crofts, 1972).
 
 
-    [2] Hebb, D. O. The organization of behavior: A neuropsychological theory. (Psychology Press, 2005).
+    .. [2] Hebb, D. O. The organization of behavior: A neuropsychological theory. (Psychology Press, 2005).
 
 
-    [3] Smith, D., Wessnitzer, J. & Webb, B. A model of associative learning in the mushroom body. Biol Cybern 99,
-    89–103 (2008).
-
+    .. [3] Smith, D., Wessnitzer, J. & Webb, B. A model of associative learning in the mushroom body. Biol Cybern 99,
+       89–103 (2008).
 """
 
 __author__ = "Evripidis Gkanias"
@@ -33,7 +32,7 @@ def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     The dopaminergic learning rule introduced in Gkanias et al (2021). Reinforcement here is assumed to be the
     dopaminergic factor.
 
-        dw/dt = rein * [r_pre + w(t) - w_rest) / tau
+        tau * dw / dt = rein * [r_pre + w(t) - w_rest]
 
         tau = 1 / learning_rate
 
@@ -51,7 +50,7 @@ def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
         the post-synaptic responses.
     rein: np.ndarray
         the dopaminergic factor.
-    learning_rate: float
+    learning_rate: float, optional
         the learning rate.
     w_rest: np.ndarray | float
         the resting value for the synaptic weights.
@@ -68,9 +67,9 @@ def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
 
 def prediction_error(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     """
-    The prediction-error learning rule introduced in Rescorla and Wagner (1972).
+    The prediction-error learning rule introduced in [1]_.
 
-        dw/dt = r_pre * [rein - r_post - w_rest) / tau
+        tau * dw / dt = r_pre * (rein - r_post - w_rest)
 
         tau = 1 / learning_rate
 
@@ -88,7 +87,7 @@ def prediction_error(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
         the post-synaptic responses.
     rein: np.ndarray
         the reinforcement signal.
-    learning_rate: float
+    learning_rate: float, optional
         the learning rate.
     w_rest: np.ndarray | float
         the resting value for the synaptic weights.
@@ -97,6 +96,11 @@ def prediction_error(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     -------
     w': np.ndarray
         the updated synaptic weights
+
+    Notes
+    -----
+    .. [1] Rescorla, R. A. & Wagner, A. R. A theory of Pavlovian conditioning: Variations in the effectiveness of
+       reinforcement and nonreinforcement. in 64–99 (Appleton-Century-Crofts, 1972).
     """
     rein = rein[np.newaxis, ...]
     r_pre = r_pre[..., np.newaxis]
@@ -106,9 +110,9 @@ def prediction_error(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
 
 def hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     """
-    The Hebbian learning rule introduced in Hebb (2005).
+    The Hebbian learning rule introduced in [1]_.
 
-        dw/dt = (rein * r_pre x r_post + w_rest) / tau
+        tau * dw / dt = rein * r_pre x r_post + w_rest
 
         tau = 1 / learning_rate
 
@@ -125,7 +129,7 @@ def hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
         the post-synaptic responses.
     rein: np.ndarray
         the reinforcement signal.
-    learning_rate: float
+    learning_rate: float, optional
         the learning rate.
     w_rest: np.ndarray | float
         the resting value for the synaptic weights.
@@ -134,6 +138,11 @@ def hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     -------
     w': np.ndarray
         the updated synaptic weights
+
+    Notes
+    -----
+    .. [1] Hebb, D. O. The organization of behavior: A neuropsychological theory. (Psychology Press, 2005).
+
     """
     rein = rein[np.newaxis, ...]
     r_pre = r_pre[..., np.newaxis]
@@ -143,9 +152,9 @@ def hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
 
 def anti_hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     """
-    The anti-Hebbian learning rule introduced in Smith (2008).
+    The anti-Hebbian learning rule introduced in [1]_.
 
-        dw/dt = (-rein * r_pre x r_post + w_rest) / tau
+        tau * dw / dt = -rein * r_pre x r_post + w_rest
 
         tau = 1 / learning_rate
 
@@ -162,7 +171,7 @@ def anti_hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
         the post-synaptic responses.
     rein: np.ndarray
         the reinforcement signal.
-    learning_rate: float
+    learning_rate: float, optional
         the learning rate.
     w_rest: np.ndarray | float
         the resting value for the synaptic weights.
@@ -171,6 +180,11 @@ def anti_hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     -------
     w': np.ndarray
         the updated synaptic weights
+
+    Notes
+    -----
+    .. [1] Smith, D., Wessnitzer, J. & Webb, B. A model of associative learning in the mushroom body. Biol Cybern 99,
+       89–103 (2008).
     """
     rein = np.maximum(rein[np.newaxis, ...], 0)
     r_pre = r_pre[..., np.newaxis]

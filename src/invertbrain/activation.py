@@ -31,13 +31,13 @@ def leaky_relu(x, leak=.08, cmin=-np.inf, cmax=np.inf, noise=0., rng=RNG):
     ----------
     x: np.ndarray | float
         the input values.
-    leak: float
+    leak: float, optional
         the leaking constant
-    cmin: float
+    cmin: float, optional
         the minimum constant
-    cmax: float
+    cmax: float, optional
         the maximum constant
-    noise: float
+    noise: float, optional
         the variance of the noise
     rng
         the random generator
@@ -63,11 +63,11 @@ def linear(x, cmin=-np.inf, cmax=np.inf, noise=0., rng=RNG):
     ----------
     x: np.ndarray | float
         the input values.
-    cmin: float
+    cmin: float, optional
         the minimum constant
-    cmax: float
+    cmax: float, optional
         the maximum constant
-    noise: float
+    noise: float, optional
         the variance of the noise
     rng
         the random generator
@@ -93,11 +93,11 @@ def relu(x, cmin=-np.inf, cmax=np.inf, noise=0., rng=RNG):
     ----------
     x: np.ndarray | float
         the input values.
-    cmin: float
+    cmin: float, optional
         the minimum constant
-    cmax: float
+    cmax: float, optional
         the maximum constant
-    noise: float
+    noise: float, optional
         the variance of the noise
     rng
         the random generator
@@ -123,11 +123,11 @@ def sigmoid(x, cmin=0, cmax=1, noise=0., rng=RNG):
     ----------
     x: np.ndarray | float
         the input values.
-    cmin: float
+    cmin: float, optional
         the minimum constant
-    cmax: float
+    cmax: float, optional
         the maximum constant
-    noise: float
+    noise: float, optional
         the variance of the noise
     rng
         the random generator
@@ -157,13 +157,13 @@ def softmax(x, tau=1., cmin=0., cmax=1, noise=0., rng=RNG, axis=None):
     ----------
     x: np.ndarray, float
         The input values.
-    tau: float
+    tau: float, optional
         The temperature parameter.
-    cmin: float
+    cmin: float, optional
         the minimum constant
-    cmax: float
+    cmax: float, optional
         the maximum constant
-    noise: float
+    noise: float, optional
         the variance of the noise
     rng
         the random generator

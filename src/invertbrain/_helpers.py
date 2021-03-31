@@ -14,7 +14,13 @@ __maintainer__ = "Evripidis Gkanias"
 import numpy as np
 
 RNG = np.random.RandomState(2021)
+"""
+The defaults random value generator.
+"""
 eps = np.finfo(float).eps
+"""
+The smallest non-zero positive.
+"""
 
 
 def set_rng(seed):
@@ -38,9 +44,7 @@ def svd2pca(U, S, V, epsilon=10e-5):
     U: np.ndarray
     S: np.ndarray
     V: np.ndarray
-    epsilon: float
-
-    :param epsilon:
+    epsilon: float, optional
 
     Returns
     -------
@@ -58,9 +62,7 @@ def svd2zca(U, S, V, epsilon=10e-5):
     U: np.ndarray
     S: np.ndarray
     V: np.ndarray
-    epsilon: float
-
-    :param epsilon:
+    epsilon: float, optional
 
     Returns
     -------
@@ -77,10 +79,10 @@ def build_kernel(x, svd2ker, m=None, epsilon=10e-5, dtype='float32'):
     ----------
     x: np.ndarray
     svd2ker: callable
-    m: np.ndarray
-    epsilon: float
+    m: np.ndarray, optional
+    epsilon: float, optional
         the smoothing parameter of the data
-    dtype
+    dtype: np.dtype, optional
 
     Returns
     -------
@@ -121,13 +123,13 @@ def zca(x, shape=None, m=None, epsilon=10e-5, dtype='float32'):
     ----------
     x: np.ndarray
         the data to build the kernel from
-    shape: tuple, list
+    shape: list, optional
         the shape of the data
-    m: np.ndarray
+    m: np.ndarray, optional
         the mean values of the data
-    epsilon: float
+    epsilon: float, optional
         whitening constant, it prevents division by zero
-    dtype
+    dtype: np.dtype, optional
 
     Returns
     -------
@@ -135,7 +137,7 @@ def zca(x, shape=None, m=None, epsilon=10e-5, dtype='float32'):
         the ZCA whitening kernel
     """
     if shape is not None:
-        x = x.reshape(shape)
+        x = x.reshape(tuple(shape))
     return build_kernel(x, svd2zca, m=m, epsilon=epsilon, dtype=dtype)
 
 
@@ -147,13 +149,13 @@ def pca(x, shape=None, m=None, epsilon=10e-5, dtype='float32'):
     ----------
     x: np.ndarray
         the data to build the kernel from
-    shape: tuple, list
+    shape: list, optional
         the shape of the data
-    m: np.ndarray
+    m: np.ndarray, optional
         the mean values of the data
-    epsilon: float
+    epsilon: float, optional
         whitening constant, it prevents division by zero
-    dtype
+    dtype: np.dtype, optional
 
     Returns
     -------
@@ -162,7 +164,7 @@ def pca(x, shape=None, m=None, epsilon=10e-5, dtype='float32'):
 
     """
     if shape is not None:
-        x = x.reshape(shape)
+        x = x.reshape(tuple(shape))
     return build_kernel(x, svd2pca, m=m, epsilon=epsilon, dtype=dtype)
 
 
@@ -175,15 +177,15 @@ def whitening(x, w=None, m=None, func=pca, epsilon=10e-5, reshape='first'):
     ----------
     x: np.ndarray
         the input data
-    m: np.ndarray
+    m: np.ndarray, optional
         the mean of the input data. If None, it is computed automatically.
-    w: np.ndarray
+    w: np.ndarray, optional
         the transformation matrix
-    func: callable
+    func: callable, optional
         the transformation we want to apply
-    epsilon: float
+    epsilon: float, optional
         whitening constant (10e-5 is typical for values around [-1, 1]
-    reshape: str
+    reshape: str, optional
         the reshape option of the data; one of 'first' or 'last'. Default is first.
 
     Returns

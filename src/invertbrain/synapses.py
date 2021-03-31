@@ -35,11 +35,11 @@ def uniform_synapses(nb_in, nb_out, fill_value=0, dtype='float32', bias=None):
         the number of the input units.
     nb_out: int
         the number of the output units.
-    fill_value: float
+    fill_value: float, optional
         the value of all the synaptic weights.
     dtype: np.dtype | str
         the type of the values for the synaptic weights.
-    bias: float
+    bias: float, optional
         the value of all the biases. If None, no bias is returned.
 
     Returns
@@ -78,11 +78,11 @@ def diagonal_synapses(nb_in, nb_out, fill_value=1, tile=False, dtype='float32', 
         the number of the output units.
     fill_value: float
         the value of the non-zero synaptic weights.
-    tile: bool
+    tile: bool, optional
         if True and nb_in != nb_out, then it wraps the diagonal starting from the beginning.
     dtype: np.dtype | str
         the type of the values for the synaptic weights.
-    bias: float
+    bias: float, optional
         the value of all the biases. If None, no bias is returned.
 
     Returns
@@ -116,17 +116,17 @@ def sparse_synapses(nb_in, nb_out, nb_in_min=None, nb_in_max=None, normalise=Tru
         the number of the input units.
     nb_out: int
         the number of the output units.
-    nb_in_min: int
+    nb_in_min: int, optional
         the minimum number of input neurons connected to each output neuron.
-    nb_in_max: int
+    nb_in_max: int, optional
         the maximum number of input neurons connected to each output neuron.
-    normalise: bool
+    normalise: bool, optional
         if the synaptic weights for each output neuron should sum to 1.
     dtype: np.dtype | str
         the type of the values for the synaptic weights.
     rng
         the random value generator.
-    bias: float
+    bias: float, optional
         the value of all the biases. If None, no bias is returned.
 
     Returns
@@ -186,13 +186,13 @@ def opposing_synapses(nb_in, nb_out, fill_value=1., dtype='float32', bias=None):
         the number of the input units.
     nb_out: int
         the number of the output units.
-    fill_value: float
+    fill_value: float, optional
         the value of the non-zero synaptic weights.
     dtype: np.dtype | str
         the type of the values for the synaptic weights.
     rng
         the random value generator.
-    bias: float
+    bias: float, optional
         the value of all the biases. If None, no bias is returned.
 
     Returns
@@ -217,11 +217,11 @@ def sinusoidal_synapses(nb_in, nb_out, fill_value=1., dtype='float32', bias=None
         the number of the input units.
     nb_out: int
         the number of the output units.
-    fill_value: float
+    fill_value: float, optional
         the value of all the synaptic weights.
     dtype: np.dtype | str
         the type of the values for the synaptic weights.
-    bias: float
+    bias: float, optional
         the value of all the biases. If None, no bias is returned.
 
     Returns
@@ -249,15 +249,15 @@ def chessboard_synapses(nb_in, nb_out, fill_value=1., nb_rows=2, nb_cols=2, dtyp
         the number of the input units.
     nb_out: int
         the number of the output units.
-    fill_value: float
+    fill_value: float, optional
         the value of all the synaptic weights.
-    nb_rows: int
+    nb_rows: int, optional
         the number of chessboard rows
-    nb_cols: int
+    nb_cols: int, optional
         the number of chessboard columns
     dtype: np.dtype | str
         the type of the values for the synaptic weights.
-    bias: float
+    bias: float, optional
         the value of all the biases. If None, no bias is returned.
 
     Returns
@@ -281,7 +281,7 @@ def dct_synapses(nb_in, dtype='float32'):
 
     nb_in: int
         the number of input neurons is the same as the number of output neurons.
-    dtype: np.dtype | str
+    dtype: np.dtype, optional
         the type of the values for the synaptic weights.
 
     Returns
@@ -306,7 +306,7 @@ def dct_omm_synapses(omm_ori, dtype='float32'):
     ----------
     omm_ori: R
         the ommatidia orientations.
-    dtype: np.dtype | str
+    dtype: np.dtype, optional
         the type of the values for the synaptic weights.
 
     Returns
@@ -338,13 +338,13 @@ def whitening_synapses(samples, samples_mean=None, w_func=pca, dtype='float32', 
     ----------
     samples: np.ndarray
         the samples from which the whitening synaptic weights will be created.
-    samples_mean: np.ndarray
+    samples_mean: np.ndarray, optional
         the mean value of the samples. If None, it will be calculated automatically.
-    w_func: callable
+    w_func: callable, optional
         the whitening function.
-    dtype: np.dtype | str
+    dtype: np.dtype, optional
         the type of the values for the synaptic weights.
-    bias: bool
+    bias: bool, optional
         whether to return the mean value of the samples as a bias or not.
 
     Returns
@@ -373,9 +373,9 @@ def pattern_synapses(pattern, patch, dtype='float32', bias=None):
         a matrix where each value will be multiplied with the patch creating a pattern.
     patch: np.ndarray
         a matrix that will be repeated based on the pattern
-    dtype: np.dtype
+    dtype: np.dtype, optional
         the type of teh values for the synaptic weights.
-    bias: float
+    bias: float, optional
         the value of all the biases. If None, no bias is returned.
 
     Returns
@@ -399,13 +399,13 @@ def roll_synapses(w, left=None, right=None, up=None, down=None):
     ----------
     w: np.ndarray
         the input synaptic wegiths.
-    left: int
+    left: int, optional
         the number of positions to shift towards the left.
-    right: int
+    right: int, optional
         the number of positions to shift towards the right.
-    up: int
+    up: int, optional
         the number of positions to shift upwards.
-    down: int
+    down: int, optional
         the number of positions to shift downwards.
 
     Returns

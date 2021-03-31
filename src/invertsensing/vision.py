@@ -1,3 +1,8 @@
+"""
+The CompoundEye package. Contains the basic functions of the compound eyes and a function that creates a mental rotation
+matrix.
+"""
+
 __author__ = "Evripidis Gkanias"
 __copyright__ = "Copyright (c) 2021, Insect Robotics Group," \
                 "Institude of Perception, Action and Behaviour," \
@@ -18,17 +23,20 @@ import numpy as np
 
 
 class CompoundEye(Sensor):
-
     def __init__(self, omm_xyz=None, omm_ori=None, omm_rho=None, omm_pol_op=None, omm_res=None, c_sensitive=None,
                  *args, **kwargs):
         """
+        The CompoundEye class is a representation of the insect compound eye as a simple sensor. It can have multiple
+        ommatidia (multi-dimensional photo-receptors) that are distributed in eye, are pointing in different directions
+        and have different properties, such as the acceptance angle, the polarisation sensitivity, the responsiveness
+        and the spectral sensitivity.
 
         Parameters
         ----------
         omm_xyz: np.ndarray, float
             Relative 3-D position of each of the ommatidia on the eye. If None, it is automatically calculated to be
             1 unit away from the centre of the eye and towards the direction of the ommatidium.
-        omm_ori: R
+        omm_ori: R, optional
             The relative direction of each of the ommatidia on the eye. If None, it is automatically calculated from the
             position of the ommatidia, assumming that it is phasing in the direction from the centre to the position of
             the ommatidium.
@@ -42,7 +50,7 @@ class CompoundEye(Sensor):
             The polarisation sensitivity of every ommatidium (0 = None, 1 = very sensitive). If it is a single value, it
             is assigned to all the ommatidia. Default is 0.
         c_sensitive: tuple, list, np.ndarray
-            The IRGBU colour that the eyes are sensitive to (infrared, red, green, blue, ultraviolet)
+            The IRGBU colour code that the eyes are sensitive to (infrared, red, green, blue, ultraviolet)
         """
         if omm_pol_op is None or isinstance(omm_pol_op, float) or isinstance(omm_pol_op, int):
             nb_output = None
@@ -112,7 +120,6 @@ class CompoundEye(Sensor):
         self._omm_rho = omm_rho
         self._omm_res = omm_res
         self._omm_area = None
-        self._w_o2r = None  # ommatidia to responses
         # contribution of each six points on the edges of the ommatidia
         # (sigma/2 distance from the centre of the Gaussian)
         # self._nb_gau = (np.nanmax(self._omm_rho) // np.rad2deg(10) + 1) * 6
@@ -125,47 +132,58 @@ class CompoundEye(Sensor):
         self.reset()
 
     def reset(self):
-        self._w_o2r = np.eye(self._nb_input, self._nb_output[0], dtype=self.dtype)
-
         nb_omm = self.nb_ommatidia
+
+        # create the 6 Gaussian samples for each ommatidium
         omm_ori_gau = [R.from_euler('Z', np.zeros((nb_omm, 1), dtype=self.dtype)) for _ in range(6)]
         for i in range(6):
             ori_p = R.from_euler(
                 'XY', np.vstack([np.full_like(self._omm_rho, i*np.pi/3), self._omm_rho/2]).T)
             omm_ori_gau[i] = self.omm_ori * ori_p
+        # augment the sampling points with the Gaussian samples
         self._omm_ori = R.from_quat(
             np.vstack([self.omm_ori.as_quat()] + [oog.as_quat() for oog in omm_ori_gau]))
         omm_ori_gau = [self._omm_ori[(i+1) * self.nb_ommatidia:(i+2) * self.nb_ommatidia] for i in range(6)]
 
+        # reset to the initial orientation
         self._ori = copy(self._ori_init)
 
         # the small radius of each ommatidium (from the centre of the lens to the edges) in mm
         r_l = np.linalg.norm(omm_ori_gau[0].apply([1, 0, 0]) - self.omm_ori.apply([1, 0, 0]), axis=1)
+
+        # calculate the area occupied by each ommatidium
         self._omm_area = np.pi * np.square(r_l)
 
+        self._r = None  # initialise the responses
+
     def _sense(self, sky=None, scene=None):
+        # the spectral sensitivity code
         w_c = self._c_sensitive
+        # calculate the global orientation of the ommatidia
         omm_ori_glob = self._ori * self._omm_ori
+        # the number of samples for each Gaussian
         nb_gau = len(omm_ori_glob) // self.nb_ommatidia - 1
 
-        y = np.full(len(self._omm_ori), np.nan, dtype=self.dtype)
-        p = np.full(len(self._omm_ori), np.nan, dtype=self.dtype)
-        a = np.full(len(self._omm_ori), np.nan, dtype=self.dtype)
+        # initialise the luminance, degree and angle of polarisation, and the contribution from the world
+        y = np.full(len(self._omm_ori), 1., dtype=self.dtype)
+        p = np.full(len(self._omm_ori), 0., dtype=self.dtype)
+        a = np.full(len(self._omm_ori), 0., dtype=self.dtype)
         c = np.full(len(self._omm_ori), np.nan, dtype=self.dtype)
-        br = 1.
+        br = 1.  # the brightness of the environment is 1 by default
 
         if sky is not None:
+            # the brightness of the environment can be calculated given the sun position
             br = np.clip(np.sin(sky.theta_s), 0.1, 1)
+            # get the sky contribution
             y[:], p[:], a[:] = sky(omm_ori_glob, irgbu=w_c, noise=self.noise)
-        else:
-            y[:] = 1.
-            p[:] = 0.
-            a[:] = 0.
 
         if scene is not None:
+            # get the global positions of the ommatidia
             omm_pos_glob = self.xyz.reshape((1, -1))
-            s = np.sum(scene(omm_pos_glob, ori=omm_ori_glob, brightness=br, noise=self.noise) * w_c[..., 1:4], axis=1)
-            c[:] = 1 - s
+            # get the rgb values from the scene and transform them into grey scale given the spectral sensitivity
+            rgb = scene(omm_pos_glob, ori=omm_ori_glob, brightness=br, noise=self.noise)
+            # transform the rgb into grey scale given the spectral sensitivity
+            c[:] = np.sum(rgb * w_c[..., 1:4], axis=1)
 
         # add the contribution of the scene to the input from the sky
         if np.all(np.isnan(y)) or np.all(~np.isnan(c)):
@@ -187,6 +205,7 @@ class CompoundEye(Sensor):
         y_masked = np.ma.masked_array(yy, np.isnan(yy))
         y0 = np.ma.average(y_masked, axis=0, weights=w_gau) * self._omm_area * self._omm_res
 
+        # update the degree of polarisation based on the acceptance angle
         pp = p.reshape((nb_gau+1, -1))
         p_masked = np.ma.masked_array(pp, np.isnan(pp))
         p0 = np.ma.average(p_masked, axis=0, weights=w_gau)
@@ -212,8 +231,9 @@ class CompoundEye(Sensor):
         s = y0 * ((np.square(np.sin(a0 - pol_main + ori_op)) +
                    np.square(np.cos(a0 - pol_main + ori_op)) * np.square(1. - p0)) * op +
                   (1. - op))
-        r = np.sqrt(s)
-        self._r = np.clip(r, 0, 1)
+
+        # clip the responses to 1 as the incoming radiation gets saturated
+        self._r = np.clip(np.sqrt(s), 0, 1)
 
         return self._r
 
@@ -226,57 +246,85 @@ class CompoundEye(Sensor):
 
     @property
     def omm_xyz(self):
+        """
+        The 3D positions of the ommatidia.
+        """
         return self._omm_xyz
 
     @property
     def omm_ori(self):
+        """
+        The 3D orientations of the ommatidia.
+        """
         return self._omm_ori[:self.nb_ommatidia]
 
     @property
     def omm_rho(self):
+        """
+        The acceptance angles of the ommatidia in rads.
+        """
         return self._omm_rho
 
     @property
     def omm_pol(self):
+        """
+        The polarisation sensitivity of the ommatidia.
+        """
         return self._omm_pol
 
     @property
     def omm_area(self):
+        """
+        The area occupied by each ommatidium.
+        """
         return self._omm_area
 
     @property
-    def omm_responsivity(self):
+    def omm_responsiveness(self):
+        """
+        The responsiveness of the ommatidia.
+        """
         return self._omm_res
 
     @property
     def hue_sensitive(self):
+        """
+        The spectral sensitivity code of the ommatidia.
+        """
         return self._c_sensitive
 
     @property
     def nb_ommatidia(self):
+        """
+        The number of ommatidia.
+        """
         return self._omm_xyz.shape[0]
 
     @property
     def responses(self):
+        """
+        The latest responses generated by the eye.
+        """
         return self._r
 
 
-def mental_rotation_matrix(eye: CompoundEye, nb_rotates=8, dtype='float32'):
-
+def mental_rotation_matrix(eye, nb_rotates=8, dtype='float32'):
     """
     Builds a matrix (nb_om x nb_om x nb_out) that performs mental rotation of the visual input.
     In practice, it builds a maps for each of the uniformly distributed nb_out view directions,
     that allow internal rotation of the visual input for different orientations of interest (preference angles).
+
     Parameters
     ----------
     eye: CompoundEye
         The compound eye structure.
-    nb_rotates: int
+    nb_rotates: int, optional
         The number of different tuning points (preference angles).
-    dtype: np.dtype, str
+    dtype: np.dtype, optional
         The type of the elements in the matrix
     Returns
     -------
+    M: np.ndarray
         A matrix that maps the input space of the eye to nb_out uniformly distributed
     """
     nb_omm = eye.nb_ommatidia

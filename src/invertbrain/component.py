@@ -34,11 +34,11 @@ class Component(object):
             The number of input units of the component.
         nb_output: int
             The number of output units of the component.
-        nb_repeats: int
+        nb_repeats: int, optional
             The number of times we want to repeat the forward propagation. This is particularly helpful when there are
             feedback connections in the component, as it allows smooth update of all of the layers. The more repeats,
             the smoother the transition, but also more computationally expensive.
-        repeat_rate: float
+        repeat_rate: float, optional
             The rate of update in each repeat. By default this is set to: 1 / nb_repeats.
         learning_rule: callable, str
             The name of a learning rule or a function representing it. The function could have as input:
@@ -48,14 +48,14 @@ class Component(object):
                 rein - the reinforcement signal or the dopaminergic factor,
                 learning_rate - the learning rate,
                 w_rest - the resting values for the synaptic weights.
-        eligibility_trace: float
+        eligibility_trace: float, optional
             The lambda parameter for the eligibility traces. The higher the lambda, the more the new responses will rely
             on the previous ones.
-        noise: float
+        noise: float, optional
             The noise introduced in the responses of the component.
         rng: np.random.RandomState
             An instance of the numpy.random.RandomState that will be used in order to generate random patterns.
-        dtype: np.dtype
+        dtype: np.dtype, optional
             The type of the values used in this component.
         """
         self.dtype = dtype
@@ -99,12 +99,12 @@ class Component(object):
     def __call__(self, *args, callback=None, **kwargs):
         """
         When the component is called, the forward propagation is executed and the output is calculated. Then the
-        callback function is called (if provided), which gets as input the instance of teh component itself. Finally,
+        callback function is called (if provided), which gets as input the instance of the component itself. Finally,
         the output is returned.
 
         Parameters
         ----------
-        callback: callable
+        callback: callable, optional
             Customised processing of the component every time that the component is called. It gets as input the
             component itself.
 
@@ -135,7 +135,7 @@ class Component(object):
             The value to be used as the new value.
         v_pre: np.ndarray, float
             The value to be used as the previous value. Default is 0.
-        eta: float
+        eta: float, optional
             The blending parameter defines how much to rely on the previous value. For eta=0, it will rely only on the
             old value, while for eta=1, it will rely only on the new value. Default is eta=repeat_rate.
 
@@ -171,7 +171,7 @@ class Component(object):
             The responses of the reinforcement neurons or the respective dopaminergic factors.
         w_rest: np.ndarray, float
             The resting synaptic weights.
-        eta: float
+        eta: float, optional
             The learning rate.
 
         Returns

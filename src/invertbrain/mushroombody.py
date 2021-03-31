@@ -2,8 +2,8 @@
 Package that holds implementations of the Mushroom Body component of the insect brain.
 
 References:
-    Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to Encode Route
-    Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
+    .. [1] Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to Encode Route
+       Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
 """
 
 __author__ = "Evripidis Gkanias"
@@ -46,7 +46,7 @@ class MushroomBody(Component):
             The number of Dopaminergic Neurons (DANs); reinforcement encoding extrinsic neurons of the mushroom body.
         nb_mbon: int
             The number of Mushroom Body Output Neurons (MBONs). This is equivalent to the nb_output.
-        nb_apl: int
+        nb_apl: int, optional
             The number of Anterior Pair Lateral (APL) neurons. Default is 1.
         learning_rule: callable, str
             The name of a learning rule or a function representing it. The function could have as input:
@@ -57,7 +57,7 @@ class MushroomBody(Component):
                 learning_rate - the learning rate,
                 w_rest - the resting values for the synaptic weights.
             Default is the 'dopaminergic' learning rule.
-        sparseness: float
+        sparseness: float, optional
             The percentage of the number of KCs that needs to be active. Default is 3%.
         """
         if nb_mbon is None and 'nb_output' in kwargs.keys():
@@ -150,13 +150,13 @@ class MushroomBody(Component):
         ----------
         neuron_name: str
             The name of the neuron.
-        all_repeats: bool
+        all_repeats: bool, optional
             Where or not to return the responses during all the repeats. By default it returns only the final response.
 
         Returns
         -------
-            r: np.ndarray
-                the response(s) of the specified neuron. If the name of the neuron is not found, it returns None.
+        r: np.ndarray
+            the response(s) of the specified neuron. If the name of the neuron is not found, it returns None.
 
         """
         if neuron_name in self.cs_names:
@@ -200,9 +200,9 @@ class MushroomBody(Component):
 
         Parameters
         ----------
-        cs: np.ndarray
+        cs: np.ndarray, optional
             the CS input. Default is 0.
-        us: np.ndarray
+        us: np.ndarray, optional
             the US reinforcement. Default is 0.
 
         Returns
@@ -243,7 +243,7 @@ class MushroomBody(Component):
             The old DAN responses.
         mbon_pre: np.ndarray
             The old MBON responses.
-        v_update: bool
+        v_update: bool, optional
             Whether or not to update the value based on the old one or not. If not, then it is updated based on the
             eligibility trace.
 
@@ -541,7 +541,12 @@ class WillshawNetwork(MushroomBody):
                  eligibility_trace=.1, *args, **kwargs):
         """
         The Whillshaw Network is a simplified Mushroom Body component and it does not contain MBON-to-DAN connections.
-        This model is a modified version of the one presented in Ardin et al (2016).
+        This model is a modified version of the one presented in [1]_.
+
+        Notes
+        -----
+        .. [1] Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to
+           Encode Route Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
         """
 
         super(WillshawNetwork, self).__init__(
@@ -575,25 +580,25 @@ class IncentiveCircuit(MushroomBody):
 
         Parameters
         ----------
-        nb_cs: int
+        nb_cs: int, optional
             the number of neurons representing the conditional stimulus (CS) or the projection neurons (PN).
-        nb_us: int
+        nb_us: int, optional
             the number of neurons representing the unconditional stimulus (US).
-        nb_kc: int
+        nb_kc: int, optional
             the number of Kenyon cells (KCs).
-        nb_apl: int
+        nb_apl: int, optional
             the number of Anterior pair lateral (APL) neurons
-        nb_dan: int
+        nb_dan: int, optional
             the number of Dopaminergic neurons (DANs).
-        nb_mbon: int
+        nb_mbon: int, optional
             the number of MB output neurons (MBONs).
         learning_rule: callable | str
             the learning rule for the updates of the KC-MBON synaptic weights.
-        cs_magnitude: float
+        cs_magnitude: float, optional
             a constant that the CS will be multiplied with before feeding to the KCs.
-        us_magnitude: float
+        us_magnitude: float, optional
             a constant that the US will be multiplied with before feeding to the DANs.
-        ltm_charging_speed: float
+        ltm_charging_speed: float, optional
             the charging (and discharging) speed of the long-term memory MBONs.
         """
 
