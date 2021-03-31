@@ -224,7 +224,9 @@ def get_learning_rule(learning_rule_name):
     learning_rule: callable
         the function of the learning rule as a callable.
     """
-    if learning_rule_name in get_available_learning_rules():
+    if learning_rule_name is None:
+        return None
+    elif learning_rule_name in get_available_learning_rules():
         return eval(learning_rule_name)
     else:
         raise ValueError("Learning rule '%s' does not exist!" % learning_rule_name)

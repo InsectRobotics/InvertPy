@@ -78,7 +78,7 @@ class PolarisationSensor(CompoundEye):
         r = super()._sense(sky=sky, scene=scene)
 
         # transform the photoreceptor signals to POL-neuron responses.
-        return photoreceptor2pol(r, ori=self._omm_ori, dtype=self.dtype).reshape((-1, 1))
+        return np.asarray(photoreceptor2pol(r, ori=self.omm_ori, dtype=self.dtype).reshape((-1, 1)), dtype=self.dtype)
 
     def __repr__(self):
         return ("PolarisationSensor(ommatidia=%d, FOV=%.0f, responses=(%d, %d), "
