@@ -2,8 +2,10 @@
 Package that holds implementations of the Mushroom Body component of the insect brain.
 
 References:
-    .. [1] Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to Encode Route
-       Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
+    .. [1] Wessnitzer, J., Young, J. M., Armstrong, J. D. & Webb, B. A model of non-elemental olfactory learning in
+       Drosophila. J Comput Neurosci 32, 197–212 (2012).
+    .. [2] Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to Encode
+       Route Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
 """
 
 __author__ = "Evripidis Gkanias"
@@ -15,10 +17,13 @@ __license__ = "MIT"
 __version__ = "1.0.1"
 __maintainer__ = "Evripidis Gkanias"
 
+from ._helpers import eps
 from .component import Component
 from .plasticity import dopaminergic, anti_hebbian
 from .synapses import uniform_synapses, diagonal_synapses, sparse_synapses, opposing_synapses, roll_synapses
 from .activation import relu
+
+from sklearn.metrics import mean_squared_error
 
 import numpy as np
 
@@ -127,7 +132,7 @@ class MushroomBody(Component):
         self.w_u2d = diagonal_synapses(self.nb_us, self.nb_dan, fill_value=2, dtype=self.dtype)
         self.w_m2d, self.b_d = uniform_synapses(self.nb_mbon, self.nb_dan, fill_value=0, dtype=self.dtype, bias=0)
         self.w_k2a, self.b_a = uniform_synapses(self.nb_kc, self.nb_apl, dtype=self.dtype, bias=0,
-                                                fill_value=2. * (1. - self._sparseness) / float(self.nb_kc))
+                                                fill_value=2. * (1. - self._sparseness) / float(self.nb_kc + eps))
 
         self.w_d2m = diagonal_synapses(self.nb_dan, self.nb_mbon, fill_value=-1, dtype=self.dtype)
         self.w_rest = uniform_synapses(self.nb_kc, self.nb_mbon, fill_value=1, dtype=self.dtype)
@@ -565,9 +570,74 @@ class WillshawNetwork(MushroomBody):
         self.w_rest *= 0
 
     def __repr__(self):
-        return "IncentiveCircuit(PN=%d, KC=%d, EN=%d, eligibility_trace=%.2f, plasticity='%s')" % (
+        return "WillshawNetwork(PN=%d, KC=%d, EN=%d, eligibility_trace=%.2f, plasticity='%s')" % (
             self.nb_cs, self.nb_kc, self.nb_mbon, self._lambda, self.learning_rule
         )
+
+
+class PerfectMemory(MushroomBody):
+
+    def __init__(self, nb_cs=360, nb_mbon=1, error_metric=mean_squared_error, *args, **kwargs):
+        """
+        The Perfect Memory is a simplified Mushroom Body component and it does not contain any neural connections.
+        This model stores all the input received in a list and searches for the best match every time that receives a
+        new input are reports the minimum difference. This was used for comparison by many papers including [1]_.
+
+        Parameters
+        ----------
+        error_metric: callable
+            the metric that measures the error between the observation and the database.
+
+        Notes
+        -----
+        .. [1] Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to
+           Encode Route Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
+        """
+
+        kwargs.setdefault('nb_repeats', 1)
+        super().__init__(
+            nb_cs=nb_cs, nb_us=0, nb_kc=0, nb_apl=0, nb_dan=0, nb_mbon=nb_mbon, eligibility_trace=0., *args, **kwargs)
+
+        self.f_cs = lambda x: x
+
+        self._error_metric = error_metric
+        self._database = None
+        self.reset()
+
+    def reset(self):
+        super().reset()
+
+        # erase the database
+        self._database = []
+
+    def _fprop(self, cs=None, us=None):
+        if cs is None:
+            cs = np.zeros_like(self._cs[0])
+
+        self._cs[0] = self.f_cs(cs)
+
+        if len(self._database) > 0:
+            y_true = self.database.T
+            y_pred = np.array([self._cs[0]] * len(self._database)).T
+            self._mbon[0] = self._error_metric(y_true, y_pred, multioutput='raw_values', squared=False).min()
+        else:
+            self._mbon[0] = 1.
+
+        if self.update:
+            self._database.append(self._cs[0].copy())
+
+        return self._mbon[0]
+
+    def __repr__(self):
+        return "PerfectMemory(PN=%d, EN=%d, error=%s)" % (self.nb_cs, self.nb_mbon, self.error_metric)
+
+    @property
+    def database(self):
+        return np.array(self._database)
+
+    @property
+    def error_metric(self):
+        return self._error_metric.__name__
 
 
 class IncentiveCircuit(MushroomBody):
