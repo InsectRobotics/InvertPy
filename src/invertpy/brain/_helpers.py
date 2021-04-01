@@ -2,37 +2,10 @@
 Helpers for the InvertBrain package. Contains functions for whitening and random generators.
 """
 
-__author__ = "Evripidis Gkanias"
-__copyright__ = "Copyright (c) 2021, Insect Robotics Group," \
-                "Institude of Perception, Action and Behaviour," \
-                "School of Informatics, the University of Edinburgh"
-__credits__ = ["Evripidis Gkanias"]
-__license__ = "MIT"
-__version__ = "1.0.1"
-__maintainer__ = "Evripidis Gkanias"
+from invertpy.__meta import *
+from invertpy.__helpers import *
 
 import numpy as np
-
-RNG = np.random.RandomState(2021)
-"""
-The defaults random value generator.
-"""
-eps = np.finfo(float).eps
-"""
-The smallest non-zero positive.
-"""
-
-
-def set_rng(seed):
-    """
-    Sets the default random state.
-
-    Parameters
-    ----------
-    seed: int
-    """
-    global RNG
-    RNG = np.random.RandomState(seed)
 
 
 def svd2pca(U, S, V, epsilon=10e-5):

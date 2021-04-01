@@ -1,5 +1,8 @@
-from invertsense.polarisation import PolarisationSensor
-from invertio.sensor_params import save_eye2csv, load_csv2eye
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from invertpy.sense.polarisation import PolarisationSensor
+from invertpy.io.sensor_params import save_eye2csv, load_csv2eye
 
 import numpy as np
 import sys

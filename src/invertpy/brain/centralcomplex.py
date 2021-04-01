@@ -21,7 +21,6 @@ from .activation import sigmoid
 from .cx_helpers import tn_axes
 
 import numpy as np
-import yaml
 import os
 
 # get path of the script

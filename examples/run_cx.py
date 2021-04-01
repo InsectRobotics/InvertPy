@@ -1,4 +1,7 @@
-from invertbrain.centralcomplex import CentralComplex
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from invertpy.brain.centralcomplex import CentralComplex
 
 import sys
 

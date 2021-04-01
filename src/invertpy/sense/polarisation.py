@@ -15,7 +15,7 @@ __license__ = "MIT"
 __version__ = "1.0.1"
 __maintainer__ = "Evripidis Gkanias"
 
-from invertbrain.compass import photoreceptor2pol
+from invertpy.brain.compass import photoreceptor2pol
 from .vision import CompoundEye
 
 from scipy.spatial.transform import Rotation as R

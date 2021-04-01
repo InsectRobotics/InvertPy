@@ -11,16 +11,9 @@ __license__ = "MIT"
 __version__ = "1.0.1"
 __maintainer__ = "Evripidis Gkanias"
 
-import numpy as np
+from invertpy.__helpers import *
 
-RNG = np.random.RandomState(2021)
-"""
-The defaults random value generator.
-"""
-eps = np.finfo(float).eps
-"""
-The smallest non-zero positive.
-"""
+import numpy as np
 
 
 def fibonacci_sphere(nb_samples, fov=None, degrees=False):

@@ -1,3 +1,4 @@
+from invertpy.__meta import *
 from .mushroombody import MushroomBody, WillshawNetwork
 from .centralcomplex import CentralComplex
 from .compass import CelestialCompass, PolarisationCompass, SolarCompass

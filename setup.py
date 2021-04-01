@@ -15,15 +15,13 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/evgkanias/InvertBrain",
+    licence="GPLv3+",
     classifiers=[
         "Programming Language :: Python :: 3",
-        "Licence :: OSI Approved :: GPL-3.0 Licence",
+        "Licence :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
         "Operating System :: OS Independent"
     ],
-    packages=["invertbrain", "invertsense", "invertio"],
-    package_dir={
-        "invertbrain": "src/invertbrain",
-        "invertsense": "src/invertsense",
-        "invertio": "src/invertio"},
+    packages=["invertpy"],
+    package_dir={"invertpy": "src/invertpy"},
     python_requires=">=3.8",
 )

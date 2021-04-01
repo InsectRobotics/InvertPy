@@ -1,5 +1,8 @@
-from invertsense.vision import CompoundEye
-from invertio.sensor_params import save_eye2csv, load_csv2eye
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from invertpy.sense.vision import CompoundEye
+from invertpy.io.sensor_params import save_eye2csv, load_csv2eye
 
 import numpy as np
 import sys

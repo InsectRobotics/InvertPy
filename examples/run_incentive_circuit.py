@@ -1,7 +1,7 @@
-# #! /usr/bin/env python
+#! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from invertbrain.mushroombody import IncentiveCircuit
+from invertpy.brain.mushroombody import IncentiveCircuit
 
 import matplotlib.pyplot as plt
 import numpy as np
