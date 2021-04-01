@@ -30,9 +30,6 @@ __root__ = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file_
 N_COLUMNS = 8
 x = np.linspace(0, 2 * np.pi, N_COLUMNS, endpoint=False)
 
-with open(os.path.join(__root__, 'data', 'cx.yaml'), 'rb') as f:
-    params = yaml.safe_load(f)
-
 
 class CentralComplex(Component):
 
