@@ -21,7 +21,7 @@ from ._helpers import eps
 from .component import Component
 from .plasticity import dopaminergic, anti_hebbian
 from .synapses import uniform_synapses, diagonal_synapses, sparse_synapses, opposing_synapses, roll_synapses
-from .activation import relu
+from .activation import relu, winner_takes_all
 
 from sklearn.metrics import mean_squared_error
 
@@ -561,8 +561,9 @@ class WillshawNetwork(MushroomBody):
         self.f_cs = lambda x: np.asarray(x > np.sort(x)[int(self.nb_cs * .7)], dtype=self.dtype)
         self.f_dan = lambda x: relu(x, cmax=2)
         # self.f_kc = lambda x: np.asarray(x > 0, dtype=self.dtype)
-        self.f_kc = lambda x: np.asarray(
-            x >= np.sort(x)[::-1][int(self.sparseness * self.nb_kc)], dtype=self.dtype)
+        # self.f_kc = lambda x: np.asarray(
+        #     x >= np.sort(x)[::-1][int(self.sparseness * self.nb_kc)], dtype=self.dtype)
+        self.f_kc = lambda x: np.asarray(winner_takes_all(x, percentage=self.sparseness), dtype=self.dtype)
         self.f_mbon = lambda x: relu(x)
 
     def reset(self):

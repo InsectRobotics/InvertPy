@@ -42,6 +42,7 @@ In order to be able to use this code, the required packages are listed below:
 * [Python 3.8](https://www.python.org/downloads/release/python-380/)
 * [NumPy](https://numpy.org/)  >= 1.20.1
 * [SciPy](https://www.scipy.org/) >= 1.6.0
+* [scikit-learn](https://scikit-learn.org/stable/) >= 0.23.2
 
 ## Author
 

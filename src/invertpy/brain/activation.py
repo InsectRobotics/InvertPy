@@ -178,3 +178,50 @@ def softmax(x, tau=1., cmin=0., cmax=1, noise=0., rng=RNG, axis=None):
     y = np.clip(y.T / np.sum(y, axis=axis), 0., 1e+16).T + rng.normal(scale=noise, size=len(x))
 
     return np.clip(y, cmin, cmax)
+
+
+def winner_takes_all(x, tau=None, percentage=.05, cmin=0., cmax=1., noise=0., rng=RNG):
+    """
+    The Winner Takes All (WTA) algorithm can be used to force sparse coding.
+
+    This can be done by either specifying the percentage of active neurons that we want or a fixed threshold (tau).
+
+        y = x >= np.sort(x)[::-1][percentage * len(x)] + rng.normal(scale=noise)
+
+        or
+
+        y = x >= tau + rng.normal(scale=noise)
+
+        y' = clip(y, cmin, cmax)
+
+
+    Parameters
+    ----------
+    x: np.ndarray, float
+        the input values.
+    tau: float, optional
+        anything higher than this threshold will be active and anything lower will be inactive. If None, then the
+        percentage approach is applied.
+    percentage: float, optional
+        the percentage of the active neurons that we want to keep.
+    cmin: float, optional
+        the minimum constant
+    cmax: float, optional
+        the maximum constant
+    noise: float, optional
+        the variance of the noise
+    rng
+        the random generator
+    Returns
+    -------
+    y': np.ndarray
+        The output of the activation function.
+    """
+    n = len(x)
+    if tau is None:
+        k = int(percentage * n)
+        y = np.asarray(x >= np.sort(x)[::-1][k], dtype=x.dtype)
+    else:
+        y = np.asarray(x >= tau, dtype=x.dtype)
+
+    return np.clip(y + rng.normal(scale=noise, size=n), cmin, cmax)
