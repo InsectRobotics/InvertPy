@@ -1,4 +1,4 @@
-# InvertPy
+# InvertPy ![GitHub top language](https://img.shields.io/github/languages/top/evgkanias/InvertBrain) [![GitHub license](https://img.shields.io/github/license/evgkanias/InvertBrain)](https://github.com/evgkanias/InvertBrain/blob/main/LICENSE) [![Build Status](https://travis-ci.com/evgkanias/InvertBrain.svg?token=tyo7V4GZ2Vq6iYPrXVLD&branch=main)](https://travis-ci.com/evgkanias/InvertBrain)
 
 This Python package aims to collect and implement computational models that are used
 in the literature and are relevant to the invertebrate processing, from the environment
