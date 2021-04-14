@@ -2,7 +2,6 @@
 Helpers for the InvertBrain package. Contains functions for whitening and random generators.
 """
 
-from invertpy.__meta import *
 from invertpy.__helpers import *
 
 import numpy as np

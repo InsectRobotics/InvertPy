@@ -9,7 +9,7 @@ import sys
 
 
 def main(*args):
-    ic = IncentiveCircuit(cs_magnitude=2., nb_apl=0, ltm_charging_speed=.05, repeat_learning_rate=.2, noise=0.)
+    ic = IncentiveCircuit(cs_magnitude=2., nb_apl=0, ltm_charging_speed=.05, repeat_rate=.2, noise=0.)
 
     history = []
     for i in range(1):

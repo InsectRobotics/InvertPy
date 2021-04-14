@@ -1,5 +1,3 @@
-from invertpy.__meta import __version__
-
 import setuptools
 
 with open("README.md", "r", encoding="utf-8") as fh:
@@ -10,7 +8,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fr:
 
 setuptools.setup(
     name="invertpy",
-    version=__version__,
+    version="v1.0.0-alpha",
     author="Evripidis Gkanias",
     maintainer="Evripidis Gkanias",
     author_email="ev.gkanias@ed.ac.uk",
