@@ -15,7 +15,7 @@ the **InvertPy** package.
 
 
 
-## InvertBrain
+## Brain
 
 Python package that embodies brain computations of the invertebrates.
 This package contains python implementations of computational models for components
@@ -23,7 +23,7 @@ and functions in the insect brain. The brain components include the mushroom bod
 (MB) and central complex (CX). A variety of customised functions are also available
 allowing to change their characteristics and create your own brain models.
 
-## InvertSense
+## Sense
 
 Python package that implements sensors of the invertebrates.
 The sensors are the only way that we can experience our environment. Depending on the
@@ -32,7 +32,7 @@ of very different sensors from mammals (humans). In this package we try to captu
 what invertebrates sense and how do they transform their surrounding environment into
 neural responses that are feed to their brain.
 
-## InvertIO
+## IO
 
 Python package that allows saving and loading brain and sensor parameters to files.
 
