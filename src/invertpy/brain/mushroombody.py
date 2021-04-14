@@ -38,6 +38,16 @@ class MushroomBody(Component):
         from them and inhibiting them via global and local inhibition. DANs get US input and their output modulate the
         KC-MBON connections. There are also KC-KC and MBON-DAN connections supported.
 
+        Examples
+        --------
+        >>> mb = MushroomBody(nb_cs=2, nb_us=2, nb_kc=10, nb_dan=3, nb_mbon=3, nb_apl=1, learning_rule=dopaminergic, sparseness=0.03)
+        >>> print(mb.nb_cs, mb.nb_us, mb.nb_kc, mb.nb_dan, mb.nb_mbon, mb.nb_apl)
+        2 2 10 3 3 1
+        >>> print(mb.learning_rule)
+        dopaminergic
+        >>> print(mb.sparseness)
+        0.03
+
         Parameters
         ----------
         nb_cs: int
@@ -120,6 +130,17 @@ class MushroomBody(Component):
         self.reset()
 
     def reset(self):
+        """
+        Examples
+        --------
+        >>> mb = MushroomBody(2, 2, 10, 3, 3, 1)
+        >>> mb.update = False
+        >>> print(mb.update)
+        False
+        >>> mb.reset()
+        >>> print(mb.update)
+        True
+        """
         # reset synapses
         self.w_c2k = sparse_synapses(self.nb_cs, self.nb_kc, dtype=self.dtype)
         self.w_c2k *= self.nb_cs / self.w_c2k.sum(axis=1)[:, np.newaxis]
@@ -547,6 +568,14 @@ class WillshawNetwork(MushroomBody):
         """
         The Whillshaw Network is a simplified Mushroom Body component and it does not contain MBON-to-DAN connections.
         This model is a modified version of the one presented in [1]_.
+
+        Examples
+        --------
+        >>> wn = WillshawNetwork(nb_cs=360, nb_kc=1000)
+        >>> wn.nb_cs
+        360
+        >>> wn.nb_kc
+        1000
 
         Notes
         -----
