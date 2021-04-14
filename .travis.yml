@@ -1,0 +1,24 @@
+sudo: required
+dist: focal
+
+language: python
+
+python:
+  - "3.8"
+
+install:
+  - pip install -r requirements.txt
+  - pip install .
+
+script:
+  - python -m test/component_doctest.py
+  - python -m test/mushroombody_doctest.py
+  - python -m test/centralcomplex_doctest.py
+  - python -m test/activation_doctest.py
+  - python -m test/plasticity_doctest.py
+  - python -m test/synapses_doctest.py
+  - python -m test/sensor_doctest.py
+  - python -m test/vision_doctest.py
+  - python -m test/compass_doctest.py
+  - python -m test/polarisation_doctest.py
+  - python -m test/sensor_params_doctest.py
