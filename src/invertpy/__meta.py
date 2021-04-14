@@ -4,5 +4,5 @@ __copyright__ = "Copyright (c) 2021, Insect Robotics Group," \
                 "School of Informatics, the University of Edinburgh"
 __credits__ = ["Evripidis Gkanias"]
 __license__ = "GPLv3+"
-__version__ = "1.0.1"
+__version__ = "v1.0.0-alpha"
 __maintainer__ = "Evripidis Gkanias"

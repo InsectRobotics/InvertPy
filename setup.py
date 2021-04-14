@@ -1,3 +1,5 @@
+from invertpy.__meta import __version__
+
 import setuptools
 
 with open("README.md", "r", encoding="utf-8") as fh:
@@ -8,7 +10,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fr:
 
 setuptools.setup(
     name="invertpy",
-    version="1.0.1",
+    version=__version__,
     author="Evripidis Gkanias",
     maintainer="Evripidis Gkanias",
     author_email="ev.gkanias@ed.ac.uk",
@@ -20,12 +22,18 @@ setuptools.setup(
     url="https://github.com/evgkanias/InvertBrain",
     license="GPLv3+",
     classifiers=[
+        "Development Status :: 3 - Alpha",
         "Programming Language :: Python :: 3",
+        "Intended Audience :: Science/Research",
         "Licence :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
         "Operating System :: OS Independent"
     ],
-    package_dir={"": "src/"},
-    packages=["invertpy", "invertpy.brain", "invertpy.io", "invertpy.sense"],
-    python_requires=">=3.8",
-    install_requires=requirements
+    package_dir={"": "src"},
+    packages=setuptools.find_packages(where="src"),
+    python_requires=">=3.7",
+    install_requires=requirements,
+    # project_urls={
+    #     "Bug Reports": "https://github.com/evgkanias/InvertPy/issues",
+    #     "Source": "https://github.com/evgkanias/InvertPy"
+    # }
 )

@@ -19,7 +19,7 @@ __copyright__ = "Copyright (c) 2021, Insect Robotics Group," \
                 "School of Informatics, the University of Edinburgh"
 __credits__ = ["Evripidis Gkanias"]
 __license__ = "MIT"
-__version__ = "1.0.1"
+__version__ = "v1.0.0-alpha"
 __maintainer__ = "Evripidis Gkanias"
 
 import numpy as np
@@ -57,7 +57,7 @@ def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
 
     Returns
     -------
-    w': np.ndarray
+    w_post: np.ndarray
         the updated synaptic weights
     """
     dop_fact = rein[np.newaxis, ...]
@@ -94,7 +94,7 @@ def prediction_error(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
 
     Returns
     -------
-    w': np.ndarray
+    w_post: np.ndarray
         the updated synaptic weights
 
     Notes
@@ -136,7 +136,7 @@ def hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
 
     Returns
     -------
-    w': np.ndarray
+    w_post: np.ndarray
         the updated synaptic weights
 
     Notes
@@ -178,7 +178,7 @@ def anti_hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
 
     Returns
     -------
-    w': np.ndarray
+    w_post: np.ndarray
         the updated synaptic weights
 
     Notes
