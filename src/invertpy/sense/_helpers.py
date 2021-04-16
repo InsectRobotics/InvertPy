@@ -1,5 +1,5 @@
 """
-Helpers for the InvertSensing package. Contains functions for spherical distributions and random generators.
+Helpers for the invertpy.sense package. Contains functions for spherical distributions and random generators.
 """
 
 __author__ = "Evripidis Gkanias"

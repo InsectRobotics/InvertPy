@@ -1,5 +1,5 @@
 """
-Helpers for the InvertBrain package. Contains functions for whitening and random generators.
+Helpers for the invertpy.brain package. Contains functions for whitening and random generators.
 """
 
 from invertpy.__helpers import *

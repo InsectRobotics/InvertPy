@@ -1,4 +1,4 @@
-# InvertPy ![GitHub top language](https://img.shields.io/github/languages/top/evgkanias/InvertBrain) [![GitHub license](https://img.shields.io/github/license/evgkanias/InvertBrain)](https://github.com/evgkanias/InvertBrain/blob/main/LICENSE) [![Build Status](https://travis-ci.com/evgkanias/InvertBrain.svg?token=tyo7V4GZ2Vq6iYPrXVLD&branch=main)](https://travis-ci.com/evgkanias/InvertBrain)
+# InvertPy ![GitHub top language](https://img.shields.io/github/languages/top/InsectRobotics/InvertPy) [![GitHub license](https://img.shields.io/github/license/InsectRobotics/InvertPy)](https://github.com/InsectRobotics/InvertPy/blob/main/LICENSE) [![Build Status](https://travis-ci.com/InsectRobotics/InvertPy.svg?token=tyo7V4GZ2Vq6iYPrXVLD&branch=main)](https://travis-ci.com/evgkanias/InvertBrain)
 
 This Python package aims to collect and implement computational models that are used
 in the literature and are relevant to the invertebrate processing, from the environment
@@ -6,7 +6,7 @@ to sensor responses and to deeper neural responses in the invertebrate brain. It
 split in 3 sub-packages: the **InvertBrain**, the **InvertSense** and the **InvertIO**;
 which are responsible for brain, sensor and data processing respectively.
 
-[InvertSy](https://github.com/evgkanias/InvertSimulations) is a separate package that
+[InvertSy](https://github.com/InsectRobotics/InvertSy) is a separate package that
 implements environments such as the *sky* and an *AntWorld of vegetation*, using
 simple-to-install python packages, e.g. NumPy and SciPy. These environments contain
 information that humans can or cannot detect but invertebrates definitely can (e.g.
