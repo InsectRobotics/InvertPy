@@ -1,4 +1,4 @@
-# InvertPy ![GitHub top language](https://img.shields.io/github/languages/top/InsectRobotics/InvertPy) [![GitHub license](https://img.shields.io/github/license/InsectRobotics/InvertPy)](https://github.com/InsectRobotics/InvertPy/blob/main/LICENSE) [![Build Status](https://travis-ci.com/InsectRobotics/InvertPy.svg?token=tyo7V4GZ2Vq6iYPrXVLD&branch=main)](https://travis-ci.com/evgkanias/InvertBrain)
+# InvertPy ![GitHub top language](https://img.shields.io/github/languages/top/InsectRobotics/InvertPy) [![GitHub license](https://img.shields.io/github/license/InsectRobotics/InvertPy)](https://github.com/InsectRobotics/InvertPy/blob/main/LICENSE) [![Build Status](https://travis-ci.com/InsectRobotics/InvertPy.svg?token=tyo7V4GZ2Vq6iYPrXVLD&branch=main)](https://travis-ci.com/InsectRobotics/InvertPy)
 
 This Python package aims to collect and implement computational models that are used
 in the literature and are relevant to the invertebrate processing, from the environment
