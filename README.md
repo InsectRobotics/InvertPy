@@ -1,4 +1,4 @@
-# InvertPy ![GitHub top language](https://img.shields.io/github/languages/top/InsectRobotics/InvertPy) [![GitHub license](https://img.shields.io/github/license/InsectRobotics/InvertPy)](https://github.com/InsectRobotics/InvertPy/blob/main/LICENSE) [![Build Status](https://travis-ci.com/InsectRobotics/InvertPy.svg?token=tyo7V4GZ2Vq6iYPrXVLD&branch=main)](https://travis-ci.com/InsectRobotics/InvertPy)
+# InvertPy ![GitHub top language](https://img.shields.io/github/languages/top/InsectRobotics/InvertPy) [![GitHub license](https://img.shields.io/github/license/InsectRobotics/InvertPy)](https://github.com/InsectRobotics/InvertPy/blob/main/LICENSE) ![GitHub last-commit](https://img.shields.io/github/last-commit/InsectRobotics/InvertPy) [![Build Status](https://travis-ci.com/InsectRobotics/InvertPy.svg?token=tyo7V4GZ2Vq6iYPrXVLD&branch=main)](https://travis-ci.com/InsectRobotics/InvertPy)
 
 This Python package aims to collect and implement computational models that are used
 in the literature and are relevant to the invertebrate processing, from the environment
@@ -43,6 +43,27 @@ In order to be able to use this code, the required packages are listed below:
 * [NumPy](https://numpy.org/)  >= 1.20.1
 * [SciPy](https://www.scipy.org/) >= 1.6.0
 * [scikit-learn](https://scikit-learn.org/stable/) >= 0.23.2
+
+## Installation
+
+In order to install the package and reproduce the results of the manuscript you need to clone
+the code, navigate to the main directory of the project, install the dependencies and finally
+the package itself. Here is an example code that installs the package:
+
+```commandline
+mkdit ~/src
+cd ~/src
+git clone https://github.com/InsectRobotics/InvertPy.git
+cd InvertPy
+pip install -r requirements.txt
+pip install .
+```
+Note that the [pip](https://pypi.org/project/pip/) project is needed for the above installation.
+
+## Report an issue
+
+If you have any issues installing or using the package, you can report it
+[here](https://github.com/InsectRobotics/InvertPy/issues).
 
 ## Author
 
