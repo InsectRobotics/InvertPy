@@ -3,7 +3,7 @@
 This Python package aims to collect and implement computational models that are used
 in the literature and are relevant to the invertebrate processing, from the environment
 to sensor responses and to deeper neural responses in the invertebrate brain. It is
-split in 3 sub-packages: the **InvertBrain**, the **InvertSense** and the **InvertIO**;
+split in 3 sub-packages: **brain**, **sense** and **io**;
 which are responsible for brain, sensor and data processing respectively.
 
 [InvertSy](https://github.com/InsectRobotics/InvertSy) is a separate package that
