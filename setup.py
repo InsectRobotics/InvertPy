@@ -17,7 +17,7 @@ setuptools.setup(
                 "sensor responses and to deeper neural responses in the invertebrate brain.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/evgkanias/InvertBrain",
+    url="https://github.com/InsectRobotics/InvertBrain",
     license="GPLv3+",
     classifiers=[
         "Development Status :: 3 - Alpha",
@@ -30,8 +30,8 @@ setuptools.setup(
     packages=setuptools.find_packages(where="src"),
     python_requires=">=3.7",
     install_requires=requirements,
-    # project_urls={
-    #     "Bug Reports": "https://github.com/evgkanias/InvertPy/issues",
-    #     "Source": "https://github.com/evgkanias/InvertPy"
-    # }
+    project_urls={
+        "Bug Reports": "https://github.com/InsectRobotics/InvertPy/issues",
+        "Source": "https://github.com/InsectRobotics/InvertPy"
+    }
 )
