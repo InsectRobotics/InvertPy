@@ -169,7 +169,6 @@ class CompoundEye(Sensor):
         p = np.full(len(self._omm_ori), 0., dtype=self.dtype)
         a = np.full(len(self._omm_ori), 0., dtype=self.dtype)
         c = np.full(len(self._omm_ori), np.nan, dtype=self.dtype)
-        br = 1.  # the brightness of the environment is 1 by default
 
         if sky is not None:
             # the brightness of the environment can be calculated given the sun position
@@ -181,7 +180,7 @@ class CompoundEye(Sensor):
             # get the global positions of the ommatidia
             omm_pos_glob = self.xyz.reshape((1, -1))
             # get the rgb values from the scene and transform them into grey scale given the spectral sensitivity
-            rgb = scene(omm_pos_glob, ori=omm_ori_glob, brightness=br, noise=self.noise)
+            rgb = scene(omm_pos_glob, ori=omm_ori_glob, noise=self.noise)
             # transform the rgb into grey scale given the spectral sensitivity
             c[:] = np.sum(rgb * w_c[..., 1:4], axis=1)
 
