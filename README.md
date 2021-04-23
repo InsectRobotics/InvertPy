@@ -30,7 +30,7 @@ The sensors are the only way that we can experience our environment. Depending o
 available sensors, we can perceive different aspects of it. Invertebrates have a set
 of very different sensors from mammals (humans). In this package we try to capture
 what invertebrates sense and how do they transform their surrounding environment into
-neural responses that are feed to their brain.
+neural responses that are fed to their brain.
 
 ### invertpy.io
 
@@ -51,7 +51,7 @@ the code, navigate to the main directory of the project, install the dependencie
 the package itself. Here is an example code that installs the package:
 
 ```commandline
-mkdit ~/src
+mkdir ~/src
 cd ~/src
 git clone https://github.com/InsectRobotics/InvertPy.git
 cd InvertPy
