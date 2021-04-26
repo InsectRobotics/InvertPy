@@ -8,5 +8,6 @@ change their characteristics and create your own brain models.
 from .mushroombody import MushroomBody, WillshawNetwork
 from .centralcomplex import CentralComplex
 from .compass import CelestialCompass, PolarisationCompass, SolarCompass
+from .preprocessing import Preprocessing, Whitening, DiscreteCosineTransform
 from .component import Component
 from .plasticity import get_learning_rule
