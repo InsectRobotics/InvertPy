@@ -16,6 +16,8 @@ __maintainer__ = "Evripidis Gkanias"
 from .plasticity import dopaminergic, get_learning_rule
 from ._helpers import RNG
 
+from copy import copy
+
 import numpy as np
 import warnings
 
@@ -119,6 +121,24 @@ class Component(object):
             callback(self)
 
         return out
+
+    def copy(self):
+        """
+        Creates a clone of the instance.
+
+        Returns
+        -------
+        copy: Component
+            another instance of exactly the same class and parameters.
+        """
+        return copy(self)
+
+    def __copy__(self):
+        component = self.__class__(nb_input=self._nb_input, nb_output=self._nb_output)
+        for att in self.__dict__:
+            component.__dict__[att] = copy(self.__dict__[att])
+
+        return component
 
     def __repr__(self):
         return "Component(in=%d, out=%d, lr='%s')" % (self._nb_input, self._nb_output, self.learning_rule)

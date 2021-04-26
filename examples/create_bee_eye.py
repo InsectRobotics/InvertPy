@@ -154,21 +154,30 @@ def build_right_bee_eye():
     return CompoundEye(omm_ori=omm_ori, omm_rho=omm_rho, omm_pol_op=omm_pol, c_sensitive=spectral, name='bee_right_eye')
 
 
-if __name__ == '__main__':
-    eye = build_right_bee_eye()
+def main(*args):
+    r_eye = build_right_bee_eye()
+    print(r_eye)
+    l_eye = CompoundEye.flip(r_eye, horizontally=True, name='bee_left_eye')
+    print(l_eye)
 
-    print(eye)
-    save_eye2csv(eye, 'bee_right')
+    save_eye2csv(r_eye, 'bee_right')
+    save_eye2csv(l_eye, 'bee_left')
 
     import matplotlib.pyplot as plt
 
-    hue = eye.hue_sensitive
+    hue = l_eye.hue_sensitive
     rgb = hue[..., 1:4]
     rgb[:, [0, 2]] += hue[..., 4:5] / 2
     rgb[:, 0] += hue[..., 0]
     plt.subplot(111, polar=False)
-    yaw, pitch, raw = eye.omm_ori.as_euler('ZYX', degrees=True).T
+    yaw, pitch, raw = r_eye.omm_ori.as_euler('ZYX', degrees=True).T
     plt.scatter(yaw, pitch, s=20, c=np.clip(rgb, 0, 1))
     plt.xlim([-180, 180])
     plt.ylim([-90, 90])
     plt.show()
+
+
+if __name__ == '__main__':
+    import sys
+
+    main(*sys.argv)

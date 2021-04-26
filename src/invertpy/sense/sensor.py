@@ -16,6 +16,7 @@ __maintainer__ = "Evripidis Gkanias"
 from ._helpers import RNG
 
 from scipy.spatial.transform import Rotation as R
+from copy import copy
 
 import numpy as np
 
@@ -108,6 +109,26 @@ class Sensor(object):
             callback(self)
 
         return out
+
+    def copy(self):
+        """
+        Creates a clone of the instance.
+
+        Returns
+        -------
+        copy: Sensor
+            another instance of exactly the same class and parameters.
+        """
+        return copy(self)
+
+    def __copy__(self):
+        nb_in = self._nb_input
+        nb_out = self._nb_output[0] if isinstance(self._nb_output, tuple) else self._nb_output
+        sensor = self.__class__(nb_input=nb_in, nb_output=nb_out)
+        for att in self.__dict__:
+            sensor.__dict__[att] = copy(self.__dict__[att])
+
+        return sensor
 
     def __repr__(self):
         return "Sensor(in=%d, out=%d, pos=(%.2f, %.2f, %.2f), ori=(%.2f, %.2f, %.2f), name='%s')" % (

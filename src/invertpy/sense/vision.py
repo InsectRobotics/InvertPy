@@ -114,6 +114,7 @@ class CompoundEye(Sensor):
             c_sensitive = c_sensitive[np.newaxis, ...]
         c_sensitive /= np.maximum(c_sensitive.sum(axis=1), eps)[..., np.newaxis]
 
+        print(omm_rho.shape)
         self._omm_ori = omm_ori
         self._omm_xyz = omm_xyz
         self._omm_pol = omm_pol_op
@@ -242,6 +243,44 @@ class CompoundEye(Sensor):
             self.nb_ommatidia, self._nb_output[0], self._nb_output[1],
             self.x, self.y, self.z, self.yaw_deg, self.pitch_deg, self.roll_deg, self.name
         )
+
+    @staticmethod
+    def flip(eye, horizontally=True, vertically=False, name=None):
+        """
+        Flips the eye horizontally, vertically or both.
+
+        Parameters
+        ----------
+        eye: CompoundEye
+            the eye to flip
+        horizontally: bool, optional
+            whether to flip it horizontally. Default is True
+        vertically: bool, optional
+            whether to flip it vertically. Default is False
+        name: str, optional
+            the name of the flipped eye. Default is None
+
+        Returns
+        -------
+        CompoundEye
+        """
+        eye_copy = eye.copy()
+
+        euler = eye_copy._omm_ori.as_euler('ZYX')
+        xyz = eye_copy._omm_xyz
+        if horizontally:
+            euler[:, 0] *= -1
+            xyz[:, 1] *= -1
+        if vertically:
+            euler[:, 1] *= -1
+            xyz[:, 0] *= -1
+
+        eye_copy._omm_ori = R.from_euler('ZYX', euler)
+        eye_copy._omm_xyz = xyz
+        if name is not None:
+            eye_copy.name = name
+
+        return eye_copy
 
     @property
     def omm_xyz(self):
