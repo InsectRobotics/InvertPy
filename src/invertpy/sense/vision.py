@@ -41,8 +41,8 @@ class CompoundEye(Sensor):
             position of the ommatidia, assumming that it is phasing in the direction from the centre to the position of
             the ommatidium.
         omm_rho: np.ndarray, float
-            The acceptance angle of each ommatidium. If it is a single value, it is assigned to all the ommatidia.
-            Default is 5 deg.
+            The acceptance angle of each ommatidium in rad. If it is a single value, it is assigned
+            to all the ommatidia. Default is 5 deg.
         omm_res: np.ndarray, float
             The responsivity of each ommatidium. If it is a single value, it is assigned to all the ommatidia.
             Default is 1.

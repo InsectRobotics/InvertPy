@@ -22,7 +22,7 @@ __dir__ = os.path.dirname(os.path.realpath(__file__))
 The local directory.
 """
 
-__data_dir__ = os.path.abspath(os.path.join(__dir__, '..', '..', 'data'))
+__data_dir__ = os.path.abspath(os.path.join(__dir__, '..', '..', '..', 'data'))
 """
 Directory holding the data.
 """
