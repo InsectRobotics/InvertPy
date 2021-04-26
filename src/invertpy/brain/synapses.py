@@ -12,6 +12,7 @@ __version__ = "v1.0.0-alpha"
 __maintainer__ = "Evripidis Gkanias"
 
 from ._helpers import RNG, pca, whitening
+from .activation import softmax
 
 from scipy.spatial.transform import Rotation as R
 
@@ -423,5 +424,43 @@ def roll_synapses(w, left=None, right=None, up=None, down=None):
         w = np.vstack([w[int(left):, :], w[:int(left), :]])
     elif down is not None:
         w = np.vstack([w[-int(right):, :], w[:-int(right), :]])
+
+    return w
+
+
+def mental_rotation_synapses(omm_ori, nb_out, sigma=.02, dtype='float32'):
+    """
+    Builds a matrix (nb_om x nb_om x nb_out) that performs mental rotation of the visual input.
+
+    In practice, it builds a maps for each of the uniformly distributed nb_out view directions,
+    that allow internal rotation of the visual input for different orientations of interest (preference angles).
+
+    Parameters
+    ----------
+    omm_ori: R
+        orientations of the ommatidia
+    nb_out: int
+        number of the different tuning points (preference angles)
+    sigma: float, optional
+        mental radius of each ommatidium
+    dtype: np.dtype, optional
+        the type of the data in the array of weights
+
+    Returns
+    -------
+    np.ndarray[float]
+        A matrix that maps the input space of the eye to nb_out uniformly distributed
+    """
+
+    nb_omm = np.shape(omm_ori)[0]
+    w = np.zeros((nb_omm, nb_omm, nb_out), dtype=dtype)
+    phi_out = np.linspace(0, 2 * np.pi, nb_out, endpoint=False)
+
+    for i in range(nb_out):
+        i_ori = R.from_euler('Z', phi_out[i], degrees=False) * omm_ori
+        for j in range(nb_omm):
+            j_ori = omm_ori[j]
+            d = np.linalg.norm(j_ori.apply([1, 0, 0]) - i_ori.apply([1, 0, 0]), axis=1) / 2
+            w[j, :, i] = softmax(1. - d, tau=sigma)
 
     return w

@@ -15,8 +15,10 @@ __maintainer__ = "Evripidis Gkanias"
 
 from abc import ABC
 
+from invertpy.sense import CompoundEye
+
 from .component import Component
-from .synapses import whitening_synapses, dct_synapses
+from .synapses import whitening_synapses, dct_synapses, mental_rotation_synapses
 from .activation import softmax
 from ._helpers import whitening, pca, eps
 
@@ -31,9 +33,9 @@ class Preprocessing(Component, ABC):
         Parameters
         ----------
         nb_input: int
-            The number of input units of the preprocessing component.
+            number of input units of the preprocessing component.
         nb_output: int, optional
-            The number of output units of the preprocessing component. Default is the same as the input
+            number of output units of the preprocessing component. Default is the same as the input
         """
         if nb_output is None:
             nb_output = nb_input
@@ -44,7 +46,6 @@ class Preprocessing(Component, ABC):
 
 
 class Whitening(Preprocessing):
-
     def __init__(self, *args, samples=None, w_method=pca, **kwargs):
         """
         A component that implements the whitening preprocessing. This component needs training during the reset method.
@@ -249,3 +250,113 @@ class DiscreteCosineTransform(Preprocessing):
         return "DiscreteCosineTransform(in=%d, out=%d, calibrated=%s)" % (
             self._nb_input, self._nb_output, self.calibrated
         )
+
+
+class MentalRotation(Preprocessing):
+    def __init__(self, *args, nb_input=None, nb_output=8, eye=None, sigma=.02, **kwargs):
+        """
+        Performs mental rotation of the visual input into a fixed number of preferred angles (nb_output).
+        This is done through a number of map from each ommatidium to every other ommatidium that is positioned
+        close to the direction where it would be facing if the eye was rotated. This 3D map gets as input an
+        array of size `nb_input` and returns a matrix of `nb_input` x `nb_output`, where each row corresponds
+        to the different ommatidia of the eye and every column to the mentally rotated orientation.
+
+        Parameters
+        ----------
+        nb_input: int, optional
+            number of input units is the same as the number of ommatidia. Default is the number of ommatidia of the eye
+            (if provided)
+        nb_output: int, optional
+            number of output orientations. Default is 8
+        eye: CompoundEye, optional
+            compound eye which will be used to compute the parameters. Default is None
+        sigma: float, optional
+            mental radius of each ommatidium (percentile). Default is 0.02
+        """
+        assert nb_input is None and eye is None, ("You should specify the input either by the 'nb_input' or the 'eye' "
+                                                  "attribute.")
+        if eye is not None:
+            nb_input = eye.nb_ommatidia
+        super().__init__(*args, nb_input=nb_input, nb_output=nb_output, **kwargs)
+
+        self._w_rot = np.zeros((nb_input, nb_input, nb_output))
+        """
+        The weights that perform the mental rotation.
+        """
+
+        self._omm_ori = None
+        """
+        The orientations of the ommatidia.
+        """
+
+        self._f_rot = lambda x: x
+        """
+        Activation after the rotation.
+        """
+
+        self._sigma = sigma
+        """
+        The mental radius of each ommatidium.
+        """
+
+        self.params.append(self._w_rot)
+        self.reset(eye)
+
+    def reset(self, eye=None):
+        """
+        Resets the synaptic weights and eye parameters.
+
+        Parameters
+        ----------
+        eye: CompoundEye, optional
+            the new compound eye to extract the parameters from
+        """
+        if eye is not None:
+            self._omm_ori = eye.omm_ori
+        if self._omm_ori is not None:
+            self._w_rot[:] = mental_rotation_synapses(self._omm_ori, self._nb_output, sigma=self._sigma)
+
+    def _fprop(self, x):
+        """
+        Performs the mental rotation.
+
+        Parameters
+        ----------
+        x: np.ndarray[float]
+            the input from the ommatidia
+
+        Returns
+        -------
+        np.ndarray[float]
+            N x M matrix of copies of the input from ommatidia mapped to the different preferred orientations.
+
+            - N: number of inputs / ommatidia
+            - M: number of output mental rotations / preferred angles
+        """
+        return self._f_rot(x @ self._w_rot)
+
+    @property
+    def w_rot(self):
+        """
+        N x N x M matrix that maps the ommatidia input to the different mental rotations.
+
+        - N: number of input / ommatidia
+        - M: number of output mental rotations / preferred angles
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._w_rot
+
+    @property
+    def sigma(self):
+        """
+        The mental radius of each ommatidium (percentile).
+
+        Returns
+        -------
+        float
+        """
+        return self._sigma
+
