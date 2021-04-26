@@ -114,7 +114,6 @@ class CompoundEye(Sensor):
             c_sensitive = c_sensitive[np.newaxis, ...]
         c_sensitive /= np.maximum(c_sensitive.sum(axis=1), eps)[..., np.newaxis]
 
-        print(omm_rho.shape)
         self._omm_ori = omm_ori
         self._omm_xyz = omm_xyz
         self._omm_pol = omm_pol_op
