@@ -83,7 +83,7 @@ class Whitening(Preprocessing):
         """
         Indicates if the calibration process has been completed.
         """
-        print(self._nb_input, self._nb_output)
+
         self.reset(samples=samples)
         self.params.extend([self._w_white, self._m_white])
 

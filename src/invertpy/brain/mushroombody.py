@@ -226,9 +226,9 @@ class MushroomBody(Component):
 
         Parameters
         ----------
-        cs: np.ndarray, optional
+        cs: np.ndarray[float], optional
             the CS input. Default is 0.
-        us: np.ndarray, optional
+        us: np.ndarray[float], optional
             the US reinforcement. Default is 0.
 
         Returns
@@ -241,6 +241,15 @@ class MushroomBody(Component):
             cs = np.zeros_like(self._cs[0])
         if us is None:
             us = np.zeros_like(self._us[0])
+        cs = np.asarray(cs, dtype=self.dtype)
+
+        if us.shape[0] < self.nb_us:
+            _us = us
+            us = np.zeros(self.nb_us)
+            us[:_us.shape[0]] = _us
+        elif us.shape[0] > self.nb_us:
+            us = us[:self.nb_us]
+        us = np.asarray(us, dtype=self.dtype)
 
         for r in range(self.repeats):
 
@@ -257,17 +266,17 @@ class MushroomBody(Component):
 
         Parameters
         ----------
-        cs: np.ndarray
+        cs: np.ndarray[float]
             The current CS input.
-        us: np.ndarray
+        us: np.ndarray[float]
             The current US reinforcement.
-        kc_pre: np.ndarray
+        kc_pre: np.ndarray[float]
             The old KC responses.
-        apl_pre: np.ndarray
+        apl_pre: np.ndarray[float]
             The old APL responses.
-        dan_pre: np.ndarray
+        dan_pre: np.ndarray[float]
             The old DAN responses.
-        mbon_pre: np.ndarray
+        mbon_pre: np.ndarray[float]
             The old MBON responses.
         v_update: bool, optional
             Whether or not to update the value based on the old one or not. If not, then it is updated based on the
@@ -275,22 +284,23 @@ class MushroomBody(Component):
 
         Returns
         -------
-        r_post: tuple
-            kc_post: np.ndarray
-                the new KC responses.
-            apl_post: np.ndarray
-                the new APL responses.
-            dan_post: np.ndarray
-                the new DAN responses.
-            mbon_post: np.ndarray
-                the new MBON responses.
+        kc_post: np.ndarray[float]
+            the new KC responses.
+        apl_post: np.ndarray[float]
+            the new APL responses.
+        dan_post: np.ndarray[float]
+            the new DAN responses.
+        mbon_post: np.ndarray[float]
+            the new MBON responses.
         """
         a_cs = self.f_cs(cs)
+
         _kc = kc_pre @ self.w_k2k if self.w_k2k is not None else 0.
         _kc += a_cs @ self.w_c2k + apl_pre @ self.w_a2k + self.b_k
         a_kc = self.f_kc(self.update_values(_kc, v_pre=kc_pre, eta=None if v_update else (1. - self._lambda)))
 
         a_us = self.f_us(us)
+
         _dan = a_us @ self.w_u2d + mbon_pre @ self.w_m2d + self.b_d
         a_dan = self.f_dan(self.update_values(_dan, v_pre=dan_pre, eta=None if v_update else (1. - self._lambda)))
 
@@ -671,7 +681,7 @@ class PerfectMemory(MushroomBody):
 
 
 class IncentiveCircuit(MushroomBody):
-    def __init__(self, nb_cs=2, nb_us=2, nb_kc=10, nb_apl=0, nb_dan=3, nb_mbon=3, learning_rule=dopaminergic,
+    def __init__(self, nb_cs=2, nb_us=2, nb_kc=10, nb_apl=0, nb_dan=6, nb_mbon=6, learning_rule=dopaminergic,
                  cs_magnitude=2., us_magnitude=2., ltm_charging_speed=.05, *args, **kwargs):
         """
         The Incentive Circuit is a representative compartment of the Mushroom Body that encodes the memory dynamics of
