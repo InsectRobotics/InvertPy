@@ -241,12 +241,13 @@ class MushroomBody(Component):
             cs = np.zeros_like(self._cs[0])
         if us is None:
             us = np.zeros_like(self._us[0])
-        cs = np.asarray(cs, dtype=self.dtype)
+        cs = np.array(cs, dtype=self.dtype)
+        us = np.array(us, dtype=self.dtype)
 
-        if us.shape[0] < self.nb_us:
+        if len(us) < self.nb_us:
             _us = us
             us = np.zeros(self.nb_us)
-            us[:_us.shape[0]] = _us
+            us[:len(_us)] = _us
         elif us.shape[0] > self.nb_us:
             us = us[:self.nb_us]
         us = np.asarray(us, dtype=self.dtype)
