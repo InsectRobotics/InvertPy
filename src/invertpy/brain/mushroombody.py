@@ -316,7 +316,7 @@ class MushroomBody(Component):
                 D = np.maximum(a_dan, 0) @ self.w_d2m
             else:
                 D = a_dan
-            self.w_k2m = np.maximum(self.update_weights(self.w_k2m, a_kc, a_mbon, D, w_rest=self.w_rest), 0)
+            self.w_k2m = np.clip(self.update_weights(self.w_k2m, a_kc, a_mbon, D, w_rest=self.w_rest), 0, 50)
 
         return a_kc, a_apl, a_dan, a_mbon
 
