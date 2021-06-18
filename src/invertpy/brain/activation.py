@@ -47,7 +47,7 @@ def leaky_relu(x, leak=.08, cmin=-np.inf, cmax=np.inf, noise=0., rng=RNG):
     y': np.ndarray
         the output of the activation function
     """
-    lr = np.maximum(x, leak * x) + rng.normal(scale=noise, size=len(x))
+    lr = np.maximum(x, leak * x) + rng.normal(scale=noise, size=x.shape)
     return np.clip(lr, cmin, cmax)
 
 
@@ -175,7 +175,7 @@ def softmax(x, tau=1., cmin=0., cmax=1, noise=0., rng=RNG, axis=None):
         The probability of each each of the input values
     """
     y = np.exp(x / tau)
-    y = np.clip(y.T / np.sum(y, axis=axis), 0., 1e+16).T + rng.normal(scale=noise, size=len(x))
+    y = np.clip(y / np.sum(y, axis=axis), 0., 1e+16) + rng.normal(scale=noise, size=x.shape)
 
     return np.clip(y, cmin, cmax)
 
@@ -217,11 +217,11 @@ def winner_takes_all(x, tau=None, percentage=.05, cmin=0., cmax=1., noise=0., rn
     y': np.ndarray
         The output of the activation function.
     """
-    n = len(x)
+    n = x.shape
     if tau is None:
-        k = int(percentage * n)
-        y = np.asarray(x > np.sort(x)[::-1][k], dtype=x.dtype)
+        k = int(percentage * n[-1])
+        y = np.asarray(np.greater(x.T, np.sort(x)[..., ::-1][..., k]).T, dtype=x.dtype)
     else:
-        y = np.asarray(x >= tau, dtype=x.dtype)
+        y = np.asarray(np.greater_equal(x, tau), dtype=x.dtype)
 
     return np.clip(y + rng.normal(scale=noise, size=n), cmin, cmax)
