@@ -428,7 +428,7 @@ def roll_synapses(w, left=None, right=None, up=None, down=None):
     return w
 
 
-def mental_rotation_synapses(omm_ori, nb_out, sigma=.02, dtype='float32'):
+def mental_rotation_synapses(omm_ori, nb_out, phi_out=None, sigma=.02, dtype='float32'):
     """
     Builds a matrix (nb_om x nb_om x nb_out) that performs mental rotation of the visual input.
 
@@ -441,6 +441,8 @@ def mental_rotation_synapses(omm_ori, nb_out, sigma=.02, dtype='float32'):
         orientations of the ommatidia
     nb_out: int
         number of the different tuning points (preference angles)
+    phi_out: np.ndarray, optional
+        list of the preference angles for the mental rotations. Default is angles uniformly distributed in a circle.
     sigma: float, optional
         mental radius of each ommatidium
     dtype: np.dtype, optional
@@ -454,10 +456,15 @@ def mental_rotation_synapses(omm_ori, nb_out, sigma=.02, dtype='float32'):
 
     nb_omm = np.shape(omm_ori)[0]
     w = np.zeros((nb_omm, nb_omm, nb_out), dtype=dtype)
-    phi_out = np.linspace(0, 2 * np.pi, nb_out, endpoint=False)
+    if phi_out is None:
+        phi_out = np.linspace(0, 2 * np.pi, nb_out, endpoint=False)
+
+    assert len(phi_out) == nb_out, (
+        "The list of preference angles should be of the same size as the 'nb_out'."
+    )
 
     for i in range(nb_out):
-        i_ori = R.from_euler('Z', phi_out[i], degrees=False) * omm_ori
+        i_ori = R.from_euler('Z', -phi_out[i], degrees=False) * omm_ori
         for j in range(nb_omm):
             j_ori = omm_ori[j]
             d = np.linalg.norm(j_ori.apply([1, 0, 0]) - i_ori.apply([1, 0, 0]), axis=1) / 2
