@@ -24,6 +24,7 @@ from .synapses import uniform_synapses, diagonal_synapses, sparse_synapses, oppo
 from .activation import relu, winner_takes_all
 
 from sklearn.metrics import mean_squared_error
+from copy import copy
 
 import numpy as np
 
@@ -97,12 +98,12 @@ class MushroomBody(Component):
                             self.w_d2m, self.w_rest, self.b_k, self.b_m, self.b_d, self.b_a])
 
         # reserve space for the responses
-        self._cs = np.zeros((self._repeats, nb_cs), dtype=self.dtype)
-        self._us = np.zeros((self._repeats, nb_us), dtype=self.dtype)
-        self._dan = np.zeros((self._repeats, nb_dan), dtype=self.dtype)
-        self._kc = np.zeros((self._repeats, nb_kc), dtype=self.dtype)
-        self._apl = np.zeros((self._repeats, nb_apl), dtype=self.dtype)
-        self._mbon = np.zeros((self._repeats, nb_mbon), dtype=self.dtype)
+        self._cs = np.zeros((self._repeats, self.neuron_dims, nb_cs), dtype=self.dtype)
+        self._us = np.zeros((self._repeats, self.neuron_dims, nb_us), dtype=self.dtype)
+        self._dan = np.zeros((self._repeats, self.neuron_dims, nb_dan), dtype=self.dtype)
+        self._kc = np.zeros((self._repeats, self.neuron_dims, nb_kc), dtype=self.dtype)
+        self._apl = np.zeros((self._repeats, self.neuron_dims, nb_apl), dtype=self.dtype)
+        self._mbon = np.zeros((self._repeats, self.neuron_dims, nb_mbon), dtype=self.dtype)
 
         self._nb_cs = nb_cs
         self._nb_us = nb_us
@@ -159,12 +160,12 @@ class MushroomBody(Component):
         self.w_rest = uniform_synapses(self.nb_kc, self.nb_mbon, fill_value=1, dtype=self.dtype)
 
         # reset responses
-        self._cs = np.zeros((self._repeats, self.nb_cs), dtype=self.dtype)
-        self._us = np.zeros((self._repeats, self.nb_us), dtype=self.dtype)
-        self._dan = np.zeros((self._repeats, self.nb_dan), dtype=self.dtype)
-        self._kc = np.zeros((self._repeats, self.nb_kc), dtype=self.dtype)
-        self._apl = np.zeros((self._repeats, self.nb_apl), dtype=self.dtype)
-        self._mbon = np.zeros((self._repeats, self.nb_mbon), dtype=self.dtype)
+        self._cs = np.zeros((self._repeats, self.neuron_dims, self.nb_cs), dtype=self.dtype)
+        self._us = np.zeros((self._repeats, self.neuron_dims, self.nb_us), dtype=self.dtype)
+        self._dan = np.zeros((self._repeats, self.neuron_dims, self.nb_dan), dtype=self.dtype)
+        self._kc = np.zeros((self._repeats, self.neuron_dims, self.nb_kc), dtype=self.dtype)
+        self._apl = np.zeros((self._repeats, self.neuron_dims, self.nb_apl), dtype=self.dtype)
+        self._mbon = np.zeros((self._repeats, self.neuron_dims, self.nb_mbon), dtype=self.dtype)
 
         self.update = True
 
@@ -189,33 +190,33 @@ class MushroomBody(Component):
             if all_repeats:
                 return self.r_cs[..., self.cs_names.index(neuron_name)]
             else:
-                return self.r_cs[0, self.cs_names.index(neuron_name)]
+                return self.r_cs[0, ..., self.cs_names.index(neuron_name)]
 
         elif neuron_name in self.us_names:
             if all_repeats:
                 return self.r_us[..., self.us_names.index(neuron_name)]
             else:
-                return self.r_us[0, self.us_names.index(neuron_name)]
+                return self.r_us[0, ..., self.us_names.index(neuron_name)]
         elif neuron_name in self.dan_names:
             if all_repeats:
                 return self.r_dan[..., self.dan_names.index(neuron_name)]
             else:
-                return self.r_dan[0, self.dan_names.index(neuron_name)]
+                return self.r_dan[0, ..., self.dan_names.index(neuron_name)]
         elif neuron_name in self.kc_names:
             if all_repeats:
                 return self.r_kc[..., self.kc_names.index(neuron_name)]
             else:
-                return self.r_kc[0, self.kc_names.index(neuron_name)]
+                return self.r_kc[0, ..., self.kc_names.index(neuron_name)]
         elif neuron_name in self.apl_names:
             if all_repeats:
                 return self.r_apl[..., self.apl_names.index(neuron_name)]
             else:
-                return self.r_apl[0, self.apl_names.index(neuron_name)]
+                return self.r_apl[0, ..., self.apl_names.index(neuron_name)]
         elif neuron_name in self.mbon_names:
             if all_repeats:
                 return self.r_mbon[..., self.mbon_names.index(neuron_name)]
             else:
-                return self.r_mbon[0, self.mbon_names.index(neuron_name)]
+                return self.r_mbon[0, ..., self.mbon_names.index(neuron_name)]
         else:
             return None
 
@@ -237,20 +238,33 @@ class MushroomBody(Component):
             the MBONs' responses
 
         """
-        if cs is None:
-            cs = np.zeros_like(self._cs[0])
-        if us is None:
-            us = np.zeros_like(self._us[0])
-        cs = np.array(cs, dtype=self.dtype)
-        us = np.array(us, dtype=self.dtype)
+        _cs = copy(cs)
+        _us = copy(us)
 
-        if len(us) < self.nb_us:
-            _us = us
-            us = np.zeros(self.nb_us)
-            us[:len(_us)] = _us
-        elif us.shape[0] > self.nb_us:
-            us = us[:self.nb_us]
-        us = np.asarray(us, dtype=self.dtype)
+        cs = np.zeros_like(self._cs[0])
+        if _cs is not None:
+            if _cs.ndim == 1:
+                cs[..., :] = _cs
+            elif _cs.ndim == 2:
+                cs[..., :, :] = _cs
+            elif _cs.ndim == 3:
+                cs[..., :, :, :] = _cs
+            else:
+                cs[:] = _cs
+        us = np.zeros_like(self._us[0])
+        if _us is not None:
+            if _us.shape[-1] < us.shape[-1]:
+                __us = np.zeros(_us.shape[:-1] + (us.shape[-1],), dtype=self.dtype)
+                __us[..., :_us.shape[-1]] = _us
+                _us = __us
+            if _us.ndim == 1:
+                us[..., :] = _us
+            elif _us.ndim == 2:
+                us[..., :, :] = _us
+            elif _us.ndim == 3:
+                us[..., :, :, :] = _us
+            else:
+                us[:] = _us
 
         for r in range(self.repeats):
 
@@ -300,6 +314,7 @@ class MushroomBody(Component):
         _kc += a_cs @ self.w_c2k + apl_pre @ self.w_a2k + self.b_k
         a_kc = self.f_kc(self.update_values(_kc, v_pre=kc_pre, eta=None if v_update else (1. - self._lambda)))
 
+        us = np.array(us, dtype=self.dtype)
         a_us = self.f_us(us)
 
         _dan = a_us @ self.w_u2d + mbon_pre @ self.w_m2d + self.b_d
@@ -598,12 +613,13 @@ class WillshawNetwork(MushroomBody):
             nb_cs=nb_cs, nb_us=nb_us, nb_kc=nb_kc, nb_apl=nb_apl, nb_dan=nb_dan, nb_mbon=nb_mbon,
             learning_rule=learning_rule, eligibility_trace=eligibility_trace, *args, **kwargs)
 
-        self.f_cs = lambda x: np.asarray(x > np.sort(x)[int(self.nb_cs * .7)], dtype=self.dtype)
+        self.f_cs = lambda x: np.asarray(
+            np.greater(x.T, np.sort(x)[..., int(self.nb_cs * .7)]).T, dtype=self.dtype)
+        self.f_kc = lambda x: np.asarray(winner_takes_all(x, percentage=self.sparseness), dtype=self.dtype)
         self.f_dan = lambda x: relu(x, cmax=2)
         # self.f_kc = lambda x: np.asarray(x > 0, dtype=self.dtype)
         # self.f_kc = lambda x: np.asarray(
         #     x >= np.sort(x)[::-1][int(self.sparseness * self.nb_kc)], dtype=self.dtype)
-        self.f_kc = lambda x: np.asarray(winner_takes_all(x, percentage=self.sparseness), dtype=self.dtype)
         self.f_mbon = lambda x: relu(x)
 
     def reset(self):
@@ -659,13 +675,17 @@ class PerfectMemory(MushroomBody):
 
         if len(self._database) > 0:
             y_true = self.database.T
-            y_pred = np.array([self._cs[0]] * len(self._database)).T
-            self._mbon[0] = self._error_metric(y_true, y_pred, multioutput='raw_values', squared=False).min()
+            mbon = []
+            for cs in self._cs[0]:
+                y_pred = np.array([cs] * len(self._database)).T
+                dist = self._error_metric(y_true, y_pred, multioutput='raw_values', squared=False).min()
+                mbon.append(dist)
+            self._mbon[0, :, 0] = mbon
         else:
             self._mbon[0] = 1.
 
         if self.update:
-            self._database.append(self._cs[0].copy())
+            self._database.append(self._cs[0, 0].copy())
 
         return self._mbon[0]
 
@@ -753,8 +773,8 @@ class IncentiveCircuit(MushroomBody):
         self.b_m[prs:pre] = -2.
         self.b_m[pms:pme] = -2.
 
-        self._dan[0] = self.b_d.copy()
-        self._mbon[0] = self.b_m.copy()
+        self._dan[0, :, ...] = self.b_d.copy()
+        self._mbon[0, :, ...] = self.b_m.copy()
 
         # susceptible memory (SM) sub-circuit
         if has_sm:
