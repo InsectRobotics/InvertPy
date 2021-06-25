@@ -30,7 +30,7 @@ N_COLUMNS = 8
 x = np.linspace(0, 2 * np.pi, N_COLUMNS, endpoint=False)
 
 
-class CentralComplex(Component):
+class BeeCentralComplex(Component):
 
     def __init__(self, nb_tb1=8, nb_tn1=2, nb_tn2=2, nb_cl1=16, nb_tl2=16, nb_cpu4=16, nb_cpu1a=14, nb_cpu1b=2,
                  tn_prefs=np.pi/4, gain=0.05, pontin=False, *args, **kwargs):
@@ -71,7 +71,7 @@ class CentralComplex(Component):
         kwargs.setdefault('nb_input', nb_tb1 + nb_tn1 + nb_tn2)
         kwargs.setdefault('nb_output', nb_cpu1a + nb_cpu1b)
         kwargs.setdefault('learning_rule', None)
-        super(CentralComplex, self).__init__(*args, **kwargs)
+        super(BeeCentralComplex, self).__init__(*args, **kwargs)
 
         # set-up the learning speed
         if pontin:
@@ -270,7 +270,7 @@ class CentralComplex(Component):
         return a_cpu1
 
     def __repr__(self):
-        return "CentralComplex(TB1=%d, TN1=%d, TN2=%d, CL1=%d, TL2=%d, CPU4=%d, CPU1=%d)" % (
+        return "BeeCentralComplex(TB1=%d, TN1=%d, TN2=%d, CL1=%d, TL2=%d, CPU4=%d, CPU1=%d)" % (
             self.nb_tb1, self.nb_tn1, self.nb_tn2, self.nb_cl1, self.nb_tl2, self.nb_cpu4, self.nb_cpu1
         )
 
@@ -700,3 +700,473 @@ class CentralComplex(Component):
         The number CPU1 neurons.
         """
         return self._nb_cpu1a + self._nb_cpu1b
+
+
+class FlyCentralComplex(Component):
+
+    def __init__(self, nb_compass=8, nb_epg=8, nb_peg=16, nb_pen=16, nb_nod=2, nb_fbn=16, nb_pfl3=16,
+                 fixed_pfl3s=True, *args, **kwargs):
+        """
+        The Central Complex model of [1]_ as a component of the locust brain.
+
+        Parameters
+        ----------
+        nb_compass: int, optional
+            the dimensions of the input from the compass.
+        nb_epg: int, optional
+            the number of E-PG neurons.
+        nb_peg: int, optional
+            the number of P-EG neurons.
+        nb_pen: int, optional
+            the number of P-EN neurons.
+        nb_nod: int, optional
+            the total number of Nod_R and Nod_L neurons.
+        nb_fbn: int, optional
+            the total number of FBN neurons (left and right).
+        nb_pfl3: int, optional
+            the total number of PFL3 neurons (left and right).
+
+        Notes
+        -----
+        .. [1] Goulard, R. et al. A unified mechanism for innate and learned visual landmark guidance in the insect
+           central complex. bioRxic (2021).
+        """
+        kwargs.setdefault('nb_input', nb_compass + nb_nod)
+        kwargs.setdefault('nb_output', nb_pfl3)
+        kwargs.setdefault('repeat_rate', 1e-03)
+        kwargs.setdefault('learning_rule', custom_learning_rule)
+        super(FlyCentralComplex, self).__init__(*args, **kwargs)
+
+        self._fixed_pfl3s = fixed_pfl3s
+
+        self._nb_cmp = nb_compass
+        self._nb_epg = nb_epg
+        self._nb_peg = nb_peg
+        self._nb_pen = nb_pen
+        self._nb_nod = nb_nod
+        self._nb_fbn = nb_fbn
+        self._nb_pfl = nb_pfl3
+        self._nb_dna = 2
+
+        # initialise the responses of the neurons
+        self._cmp = np.zeros(self.nb_cmp, dtype=self.dtype)
+        self._epg = np.zeros(self.nb_epg, dtype=self.dtype)
+        self._peg = np.zeros(self.nb_peg, dtype=self.dtype)
+        self._pen = np.zeros(self.nb_pen, dtype=self.dtype)
+        self._nod = np.zeros(self.nb_nod, dtype=self.dtype)
+        self._fbn = np.zeros(self.nb_fbn, dtype=self.dtype)
+        self._pfl = np.zeros(self.nb_pfl3, dtype=self.dtype)
+        self._dna = np.zeros(self.nb_dna2, dtype=self.dtype)
+
+        # Weight matrices based on anatomy (These are not changeable!)
+        self._w_cmp2epg = uniform_synapses(self.nb_cmp, self.nb_epg, fill_value=0, dtype=self.dtype)
+        self._w_peg2epg = uniform_synapses(self.nb_peg, self.nb_epg, fill_value=0, dtype=self.dtype)
+        self._w_pen2epg = uniform_synapses(self.nb_pen, self.nb_epg, fill_value=0, dtype=self.dtype)
+        self._w_epg2epg = uniform_synapses(self.nb_epg, self.nb_epg, fill_value=0, dtype=self.dtype)
+        self._w_epg2peg = uniform_synapses(self.nb_epg, self.nb_peg, fill_value=0, dtype=self.dtype)
+        self._w_epg2pen = uniform_synapses(self.nb_epg, self.nb_pen, fill_value=0, dtype=self.dtype)
+        self._w_nod2pen = uniform_synapses(self.nb_nod, self.nb_pen, fill_value=0, dtype=self.dtype)
+        self._w_epg2pfl = uniform_synapses(self.nb_epg, self.nb_pfl3, fill_value=0, dtype=self.dtype)
+        self._w_epg2fbn = uniform_synapses(self.nb_epg, self.nb_fbn, fill_value=0, dtype=self.dtype)
+        self._w_nod2fbn = uniform_synapses(self.nb_nod, self.nb_fbn, fill_value=0, dtype=self.dtype)
+        self._w_pfl2dna = uniform_synapses(self.nb_pfl3, 2, fill_value=0, dtype=self.dtype)
+        self._w_fbn2pfl = uniform_synapses(self.nb_fbn, self.nb_pfl3, fill_value=0, dtype=self.dtype)
+
+        self.params.extend([
+            self._w_cmp2epg,
+            self._w_peg2epg,
+            self._w_pen2epg,
+            self._w_epg2epg,
+            self._w_epg2peg,
+            self._w_epg2pen,
+            self._w_nod2pen,
+            self._w_epg2pfl,
+            self._w_epg2fbn,
+            self._w_nod2fbn,
+            self._w_pfl2dna
+        ])
+
+        self.f_cmp = lambda v: v
+        self.f_epg = lambda v: v
+        self.f_peg = lambda v: v
+        self.f_pen = lambda v: v
+        self.f_nod = lambda v: v
+        self.f_fbn = lambda v: v
+        self.f_pfl = lambda v: v
+        self.f_dna = lambda v: v
+
+        self.reset()
+
+    def reset(self):
+        # Weight matrices based on anatomy (These are not changeable!)
+        self.w_cmp2epg = diagonal_synapses(self.nb_cmp, self.nb_epg, fill_value=1, dtype=self.dtype)
+        self.w_peg2epg = diagonal_synapses(self.nb_peg, self.nb_epg, fill_value=1, tile=True, dtype=self.dtype)
+        self.w_pen2epg = diagonal_synapses(self.nb_pen, self.nb_epg, fill_value=2.5, tile=True, dtype=self.dtype)
+        self.w_pen2epg[:self.nb_pen//2] = roll_synapses(self.w_pen2epg[:self.nb_pen//2], right=1)
+        self.w_pen2epg[self.nb_pen//2:] = roll_synapses(self.w_pen2epg[self.nb_pen//2:], left=1)
+        self.w_epg2epg = diagonal_synapses(self.nb_epg, self.nb_epg, fill_value=.2, dtype=self.dtype) - 0.2
+        self.w_epg2peg = diagonal_synapses(self.nb_epg, self.nb_peg, fill_value=1., tile=True, dtype=self.dtype)
+        self.w_epg2pen = diagonal_synapses(self.nb_epg, self.nb_pen, fill_value=.75, tile=True, dtype=self.dtype)
+        self.w_nod2pen = chessboard_synapses(self.nb_nod, self.nb_pen, nb_rows=2, nb_cols=2, fill_value=.75,
+                                             dtype=self.dtype)
+        self.w_epg2fbn = diagonal_synapses(self.nb_epg, self.nb_fbn, fill_value=1., tile=True, dtype=self.dtype)
+        self.w_nod2fbn = chessboard_synapses(self.nb_nod, self.nb_fbn, nb_rows=2, nb_cols=2, fill_value=-1.,
+                                             dtype=self.dtype)
+        self.w_pfl2dna2 = chessboard_synapses(self.nb_pfl3, 2, nb_rows=2, nb_cols=2, fill_value=1.,
+                                              dtype=self.dtype)
+        self.w_fbn2pfl3 = diagonal_synapses(self.nb_fbn, self.nb_pfl3, fill_value=1., dtype=self.dtype)
+        self.w_fbn2pfl3[:self.nb_fbn//2, :self.nb_pfl3//2] = roll_synapses(
+            self.w_fbn2pfl3[:self.nb_fbn//2, :self.nb_pfl3//2], left=1)
+        self.w_fbn2pfl3[self.nb_fbn//2:, self.nb_pfl3//2:] = roll_synapses(
+            self.w_fbn2pfl3[self.nb_fbn//2:, self.nb_pfl3//2:], right=1)
+
+        # These are changeable!
+        if self._fixed_pfl3s:
+            w_epg2pfl3 = np.square(np.sin(np.linspace(0, 2 * np.pi, 16, endpoint=False)))
+            w_epg2pfl3[:self.nb_pfl3//2] = np.roll(w_epg2pfl3[:self.nb_pfl3//2], -2)
+            w_epg2pfl3[self.nb_pfl3//2:] = np.roll(w_epg2pfl3[self.nb_pfl3//2:], 1)
+            self.w_epg2pfl3 = (diagonal_synapses(self.nb_epg, self.nb_pfl3, fill_value=-1., tile=True, dtype=self.dtype) *
+                               w_epg2pfl3)
+            self.update = False
+        else:
+            self.w_epg2pfl3 = diagonal_synapses(self.nb_epg, self.nb_pfl3, fill_value=-.5, tile=True, dtype=self.dtype)
+            self.update = True
+
+        self.r_cmp = np.zeros(self.nb_cmp, dtype=self.dtype)
+        self.r_epg = np.zeros(self.nb_epg, dtype=self.dtype)
+        self.r_peg = np.zeros(self.nb_peg, dtype=self.dtype)
+        self.r_pen = np.zeros(self.nb_pen, dtype=self.dtype)
+        self.r_nod = np.zeros(self.nb_nod, dtype=self.dtype)
+        self.r_fbn = np.zeros(self.nb_fbn, dtype=self.dtype)
+        self.r_pfl3 = np.zeros(self.nb_pfl3, dtype=self.dtype)
+        self.r_dna2 = np.zeros(self.nb_dna2, dtype=self.dtype)
+
+    def _fprop(self, compass, nod, reinforcement=None):
+        """
+
+        Parameters
+        ----------
+        compass: np.ndarray[float]
+            the input from the compass
+        nod: np.ndarray[float]
+            the left and right Noduli responses (left and right turn)
+        reinforcement: np.ndarray[float], int
+            reinforces the familiar directions
+
+        Returns
+        -------
+        np.ndarray[float]
+            the PFL3 responses that can be used as a steering command
+        """
+
+        self._cmp = a_vu = self.f_cmp(compass)
+        self._nod = a_nod = self.f_nod(nod)
+
+        self._peg = a_peg = self.f_peg(np.dot(self._epg, self.w_epg2peg))
+        self._pen = a_pen = self.f_pen(np.dot(self._epg, self.w_epg2pen) + np.dot(a_nod, self.w_nod2pen))
+        self._epg = a_epg = self.f_epg(np.dot(a_vu, self.w_cmp2epg) +
+                           np.dot(self.r_peg, self.w_peg2epg) +
+                           np.dot(self.r_pen, self.w_pen2epg))
+
+        # process the Delta7 feedback as a second step to increase stability
+        self._epg = a_epg = a_epg + np.dot(self.r_epg, self.w_epg2epg)
+
+        self._pfl = a_pfl = self.f_pfl(np.dot(a_epg, self.w_epg2pfl3))
+        self._fbn = a_fbn = self.f_fbn(np.dot(a_epg, self.w_epg2fbn) + np.dot(a_nod, self.w_nod2fbn))
+        self._dna = a_dna = self.f_dna(np.dot(a_pfl, self.w_pfl2dna2))
+
+        if self.update and reinforcement is not None:
+            a_rein = reinforcement * np.dot(a_fbn, self.w_fbn2pfl3)
+            self._w_epg2pfl[:] = self.update_weights(w_pre=self.w_epg2pfl3, r_pre=a_epg, r_post=a_pfl,
+                                                     rein=a_rein, w_rest=0.)
+
+        return a_pfl
+
+    def __repr__(self):
+        return "FlyCentralComplex(compass=%d, E-PG=%d, P-EG=%d, P-EN=%d, FsBN=%d, Noduli=%d, PFL3=%d, DNa2=%d)" % (
+            self.nb_cmp, self.nb_epg, self.nb_peg, self.nb_pen, self.nb_fbn, self.nb_nod, self.nb_pfl3, self.nb_dna2
+        )
+
+    @property
+    def w_cmp2epg(self):
+        """
+        The compass to E-PG synaptic weights.
+        """
+        return self._w_cmp2epg
+
+    @w_cmp2epg.setter
+    def w_cmp2epg(self, v):
+        self._w_cmp2epg[:] = v[:]
+
+    @property
+    def w_peg2epg(self):
+        """
+        The P-EG to E-PG synaptic weights.
+        """
+        return self._w_peg2epg
+
+    @w_peg2epg.setter
+    def w_peg2epg(self, v):
+        self._w_peg2epg[:] = v[:]
+
+    @property
+    def w_pen2epg(self):
+        """
+        The P-EN to E-PG synaptic weights.
+        """
+        return self._w_pen2epg
+
+    @w_pen2epg.setter
+    def w_pen2epg(self, v):
+        self._w_pen2epg[:] = v[:]
+
+    @property
+    def w_epg2epg(self):
+        """
+        The E-PG to E-PG synaptic weights (through Delta 7 neurons).
+        """
+        return self._w_epg2epg
+
+    @w_epg2epg.setter
+    def w_epg2epg(self, v):
+        self._w_epg2epg[:] = v[:]
+
+    @property
+    def w_epg2peg(self):
+        """
+        The E-PG to P-EG synaptic weights.
+        """
+        return self._w_epg2peg
+
+    @w_epg2peg.setter
+    def w_epg2peg(self, v):
+        self._w_epg2peg[:] = v[:]
+
+    @property
+    def w_epg2pen(self):
+        """
+        The E-PG to P-EN synaptic weights.
+        """
+        return self._w_epg2pen
+
+    @w_epg2pen.setter
+    def w_epg2pen(self, v):
+        self._w_epg2pen[:] = v[:]
+
+    @property
+    def w_nod2pen(self):
+        """
+        The Noduli to P-EN synaptic weights.
+        """
+        return self._w_nod2pen
+
+    @w_nod2pen.setter
+    def w_nod2pen(self, v):
+        self._w_nod2pen[:] = v[:]
+
+    @property
+    def w_epg2pfl3(self):
+        """
+        The E-PG to PFL3 synaptic weights.
+        """
+        return self._w_epg2pfl
+
+    @w_epg2pfl3.setter
+    def w_epg2pfl3(self, v):
+        self._w_epg2pfl[:] = v[:]
+
+    @property
+    def w_epg2fbn(self):
+        """
+        The E-PG to FsBN synaptic weights.
+        """
+        return self._w_epg2fbn
+
+    @w_epg2fbn.setter
+    def w_epg2fbn(self, v):
+        self._w_epg2fbn[:] = v[:]
+
+    @property
+    def w_nod2fbn(self):
+        """
+        The Noduli to FsBN synaptic weights.
+        """
+        return self._w_nod2fbn
+
+    @w_nod2fbn.setter
+    def w_nod2fbn(self, v):
+        self._w_nod2fbn[:] = v[:]
+
+    @property
+    def w_pfl2dna2(self):
+        """
+        The PFL3 to DNa2 synaptic weights.
+        """
+        return self._w_pfl2dna
+
+    @w_pfl2dna2.setter
+    def w_pfl2dna2(self, v):
+        self._w_pfl2dna[:] = v[:]
+
+    @property
+    def w_fbn2pfl3(self):
+        """
+        The FsBN to PFL3 synaptic weights.
+        """
+        return self._w_fbn2pfl
+
+    @w_fbn2pfl3.setter
+    def w_fbn2pfl3(self, v):
+        self._w_fbn2pfl[:] = v[:]
+
+    @property
+    def r_cmp(self):
+        """
+        The compass' response rate.
+        """
+        return self._cmp
+
+    @r_cmp.setter
+    def r_cmp(self, v):
+        self._cmp[:] = v[:]
+
+    @property
+    def nb_cmp(self):
+        """
+        The number units in the compass.
+        """
+        return self._nb_cmp
+
+    @property
+    def r_epg(self):
+        """
+        The E-PG response rate.
+        """
+        return self._epg
+
+    @r_epg.setter
+    def r_epg(self, v):
+        self._epg[:] = v[:]
+
+    @property
+    def nb_epg(self):
+        """
+        The number E-PG neurons.
+        """
+        return self._nb_epg
+
+    @property
+    def r_peg(self):
+        """
+        The P-EG response rate.
+        """
+        return self._peg
+
+    @r_peg.setter
+    def r_peg(self, v):
+        self._peg[:] = v[:]
+
+    @property
+    def nb_peg(self):
+        """
+        The number P-EG neurons.
+        """
+        return self._nb_peg
+
+    @property
+    def r_pen(self):
+        """
+        The P-EN response rate.
+        """
+        return self._pen
+
+    @r_pen.setter
+    def r_pen(self, v):
+        self._pen[:] = v[:]
+
+    @property
+    def nb_pen(self):
+        """
+        The number P-EN neurons.
+        """
+        return self._nb_pen
+
+    @property
+    def r_pfl3(self):
+        """
+        The PFL3 response rate.
+        """
+        return self._pfl
+
+    @r_pfl3.setter
+    def r_pfl3(self, v):
+        self._pfl[:] = v[:]
+
+    @property
+    def nb_pfl3(self):
+        """
+        The number PFL3 neurons.
+        """
+        return self._nb_pfl
+
+    @property
+    def r_fbn(self):
+        """
+        The FsBN response rate.
+        """
+        return self._fbn
+
+    @r_fbn.setter
+    def r_fbn(self, v):
+        self._fbn[:] = v[:]
+
+    @property
+    def nb_fbn(self):
+        """
+        The number FsB neurons.
+        """
+        return self._nb_fbn
+
+    @property
+    def r_nod(self):
+        """
+        The Noduli response rate.
+        """
+        return self._nod
+
+    @r_nod.setter
+    def r_nod(self, v):
+        self._nod[:] = v[:]
+
+    @property
+    def nb_nod(self):
+        """
+        The number CPU1a neurons.
+        """
+        return self._nb_nod
+
+    @property
+    def r_dna2(self):
+        """
+        The DNa2 response rate.
+        """
+        return self._dna
+
+    @r_dna2.setter
+    def r_dna2(self, v):
+        self._dna[:] = v[:]
+
+    @property
+    def nb_dna2(self):
+        return self._nb_dna
+
+
+def custom_learning_rule(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
+    if rein.ndim > 1:
+        rein = rein[:, np.newaxis, ...]
+    else:
+        rein = rein[np.newaxis, ...]
+    d_w = learning_rate * (rein + w_rest)
+    if d_w.ndim > 2:
+        d_w = d_w.sum(axis=0)
+    return np.clip(w + d_w, 0.2, 0.8)
