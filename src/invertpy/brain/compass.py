@@ -163,12 +163,12 @@ class CelestialCompass(Compass):
         r_cel = np.zeros(self.nb_sol, dtype=self.dtype)
         if self.has_pol:
             w_sol = self.w_sol * g
-            r_sol = r_pol @ w_sol
+            r_sol = np.dot(r_pol, w_sol)
             r_cel += r_sol
             self._r_sol = r_sol
         if self.has_sun:
             w_sun = self.w_sun * g
-            r_sun = r_sun @ w_sun
+            r_sun = np.dot(r_sun, w_sun)
             r_cel += r_cel
             self._r_sun = r_sun
         # r_cel /= (float(self.has_pol) + float(self.has_sun))
@@ -182,10 +182,10 @@ class CelestialCompass(Compass):
         if self._is_absolute:
             w_tcl = self.w_tcl * g
             # print(w_tcl)
-            r_tcl = r_pol @ w_tcl
+            r_tcl = np.dot(r_pol, w_tcl)
         else:
             w_tcl = self.w_tcl
-            r_tcl = r_cel @ w_tcl
+            r_tcl = np.dot(r_cel, w_tcl)
 
         self._r_pol = r_pol
         self._r_cel = r_cel

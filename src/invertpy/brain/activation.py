@@ -80,7 +80,7 @@ def linear(x, cmin=-np.inf, cmax=np.inf, noise=0., rng=RNG):
     return leaky_relu(x, leak=1., cmin=cmin, cmax=cmax, noise=noise, rng=rng)
 
 
-def relu(x, cmin=-np.inf, cmax=np.inf, noise=0., rng=RNG):
+def relu(x, cmin=0., cmax=np.inf, noise=0., rng=RNG):
     """
     The noisy ReLU activation function ignores the negative values of the input, adds Gaussian noise and
     clips the output to its boundaries.

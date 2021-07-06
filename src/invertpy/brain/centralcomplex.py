@@ -17,7 +17,7 @@ __maintainer__ = "Evripidis Gkanias"
 
 from .component import Component
 from .synapses import *
-from .activation import sigmoid
+from .activation import sigmoid, relu
 from .cx_helpers import tn_axes
 
 import numpy as np
@@ -89,8 +89,12 @@ class BeeCentralComplex(Component):
         self._nb_tn1 = nb_tn1
         self._nb_tn2 = nb_tn2
         self._nb_cpu4 = nb_cpu4
+        self._nb_cpu4_view = nb_cpu4
         self._nb_cpu1a = nb_cpu1a
         self._nb_cpu1b = nb_cpu1b
+        self._nb_cpu1a_view = nb_cpu1a
+        self._nb_cpu1b_view = nb_cpu1b
+
 
         # initialise the responses of the neurons
         self._tl2 = np.zeros(self.nb_tl2)
@@ -99,8 +103,11 @@ class BeeCentralComplex(Component):
         self._tn1 = np.zeros(self.nb_tn1)
         self._tn2 = np.zeros(self.nb_tn2)
         self.__cpu4 = .5 * np.ones(self.nb_cpu4)  # cpu4 memory
+        self.__cpu4_view = .5 * np.ones(self.nb_cpu4)  # cpu4 memory
         self._cpu4 = np.zeros(self.nb_cpu4)  # cpu4 output
+        self._cpu4_view = np.zeros(self.nb_cpu4)  # cpu4 output
         self._cpu1 = np.zeros(self.nb_cpu1)
+        self._cpu1_view = np.zeros(self.nb_cpu1)
 
         # Weight matrices based on anatomy (These are not changeable!)
         self._w_tl22cl1 = uniform_synapses(self.nb_tl2, self.nb_cl1, fill_value=0, dtype=self.dtype)
@@ -118,6 +125,15 @@ class BeeCentralComplex(Component):
         self._w_pontin2cpu1a = uniform_synapses(self.nb_cpu1, self.nb_cpu1a, fill_value=0, dtype=self.dtype)
         self._w_pontin2cpu1b = uniform_synapses(self.nb_cpu1, self.nb_cpu1b, fill_value=0, dtype=self.dtype)
         self._w_cpu42pontin = uniform_synapses(self.nb_cpu4, self.nb_cpu4, fill_value=0, dtype=self.dtype)
+
+        # The cell properties (for sigmoid function)
+        self._tl2_slope = 6.8
+        self._cl1_slope = 3.0
+        self._tb1_slope = 5.0
+        self._cpu4_slope = 5.0
+        self._cpu1_slope = 5.0  # 7.5
+        self._motor_slope = 1.0
+        self._pontin_slope = 5.0
 
         self._b_tl2 = 3.0
         self._b_cl1 = -0.5
@@ -152,15 +168,6 @@ class BeeCentralComplex(Component):
 
         self.tl2_prefs = np.tile(np.linspace(0, 2 * np.pi, self.nb_tb1, endpoint=False), 2)
         # self.tl2_prefs = np.tile(np.linspace(-np.pi, np.pi, self.nb_tb1, endpoint=False), 2)
-
-        # The cell properties (for sigmoid function)
-        self._tl2_slope = 6.8
-        self._cl1_slope = 3.0
-        self._tb1_slope = 5.0
-        self._cpu4_slope = 5.0
-        self._cpu1_slope = 5.0  # 7.5
-        self._motor_slope = 1.0
-        self._pontin_slope = 5.0
 
         self.f_tl2 = lambda v: sigmoid(v * self._tl2_slope - self.b_tl2, noise=self._noise, rng=self.rng)
         self.f_cl1 = lambda v: sigmoid(v * self._cl1_slope - self.b_cl1, noise=self._noise, rng=self.rng)
@@ -206,12 +213,15 @@ class BeeCentralComplex(Component):
         self.r_tn1 = np.zeros(self.nb_tn1)
         self.r_tn2 = np.zeros(self.nb_tn2)
         self.r_cpu4 = np.zeros(self.nb_cpu4)  # cpu4 output
+        self.r_cpu4_view = np.zeros(self.nb_cpu4_view)  # cpu4 output
         self.r_cpu1 = np.zeros(self.nb_cpu1)
+        self.r_cpu1_view = np.zeros(self.nb_cpu1_view)
         self.__cpu4 = .5 * np.ones(self.nb_cpu4)  # cpu4 memory
+        self.__cpu4_view = .5 * np.ones(self.nb_cpu4_view)  # cpu4 memory
 
         self.update = True
 
-    def _fprop(self, phi, flow, tl2=None, cl1=None):
+    def _fprop(self, phi, flow, tl2=None, cl1=None, reinforcement=None):
         if isinstance(phi, np.ndarray) and phi.size == 8:
             if tl2 is None:
                 tl2 = np.tile(phi, 2)
@@ -231,10 +241,9 @@ class BeeCentralComplex(Component):
         self._tn1 = a_tn1 = self.flow2tn1(flow)
         self._tn2 = a_tn2 = self.flow2tn2(flow)
 
-        # print(self._tb1)
-
         if self.pontin:
             mem = .5 * self._gain * (np.clip(a_tn2 @ self.w_tn22cpu4 - a_tb1 @ self.w_tb12cpu4, 0, 1) - .25)
+            mem_view = 0.
         else:
             # Idealised setup, where we can negate the TB1 sinusoid for memorising backwards motion
             # update = np.clip((.5 - tn1).dot(self.w_tn2cpu4), 0., 1.)  # normal
@@ -249,13 +258,27 @@ class BeeCentralComplex(Component):
 
             mem = mem_tn1 * mem_tb1 - mem_tn2
 
-        # Constant purely to visualise same as rate-based model
+            rein_mask = np.zeros(self.nb_cpu4_view, dtype=self.dtype)
+            if reinforcement is not None:
+                if np.shape(reinforcement)[0] > 1:
+                    rein_mask[:self.nb_cpu4_view//2] = reinforcement[0]
+                    rein_mask[self.nb_cpu4_view//2:] = reinforcement[1]
+                else:
+                    rein_mask[:] = np.asscalar(reinforcement)
+
+            mem_tb1_view = self._gain * rein_mask * (a_tb1 - 1.) @ self.w_tb12cpu4
+
+            mem_view = mem_tn1 * mem_tb1_view - mem_tn2
+
         cpu4_mem = np.clip(self.__cpu4 + mem, 0., 1.)
+        cpu4_mem_view = np.clip(self.__cpu4_view + mem_view, 0., 1.)
 
         if self.update:
             self.__cpu4 = cpu4_mem
+            self.__cpu4_view = cpu4_mem_view
 
         self._cpu4 = a_cpu4 = self.f_cpu4(cpu4_mem)
+        self._cpu4_view = a_cpu4_view = self.f_cpu4(cpu4_mem_view)
 
         if self.pontin:
             a_pontin = self.f_pontin(a_cpu4 @ self.w_cpu42pontin)
@@ -263,11 +286,14 @@ class BeeCentralComplex(Component):
             cpu1b = .5 * a_cpu4 @ self.w_cpu42cpu1b - .5 * a_pontin @ self.w_pontin2cpu1b - a_tb1 @ self.w_tb12cpu1b
         else:
             cpu1a = (a_cpu4 @ self.w_cpu42cpu1a) * ((a_tb1 - 1.) @ self.w_tb12cpu1a)
+            cpu1a_view = (a_cpu4_view @ self.w_cpu42cpu1a) * ((a_tb1 - 1.) @ self.w_tb12cpu1a)
             cpu1b = (a_cpu4 @ self.w_cpu42cpu1b) * ((a_tb1 - 1.) @ self.w_tb12cpu1b)
+            cpu1b_view = (a_cpu4_view @ self.w_cpu42cpu1b) * ((a_tb1 - 1.) @ self.w_tb12cpu1b)
 
         self._cpu1 = a_cpu1 = self.f_cpu1(np.hstack([cpu1b[-1], cpu1a, cpu1b[0]]))
+        self._cpu1_view = a_cpu1_view = self.f_cpu1(np.hstack([cpu1b_view[-1], cpu1a_view, cpu1b_view[0]]))
 
-        return a_cpu1
+        return a_cpu1 + a_cpu1_view
 
     def __repr__(self):
         return "BeeCentralComplex(TB1=%d, TN1=%d, TN2=%d, CL1=%d, TL2=%d, CPU4=%d, CPU1=%d)" % (
@@ -701,6 +727,63 @@ class BeeCentralComplex(Component):
         """
         return self._nb_cpu1a + self._nb_cpu1b
 
+    @property
+    def r_cpu4_view(self):
+        """
+        The CPU4 (view) response rate.
+        """
+        return self._cpu4_view
+
+    @r_cpu4_view.setter
+    def r_cpu4_view(self, v):
+        self._cpu4_view[:] = v[:]
+
+    @property
+    def cpu4_mem_view(self):
+        """
+        The CPU4 (view) memory.
+        """
+        return self.__cpu4_view
+
+    @property
+    def nb_cpu4_view(self):
+        """
+        The number CPU4 (view) neurons.
+        """
+        return self._nb_cpu4_view
+
+    @property
+    def nb_cpu1a_view(self):
+        """
+        The number CPU1a (view) neurons.
+        """
+        return self._nb_cpu1a_view
+
+    @property
+    def nb_cpu1b_view(self):
+        """
+        The number CPU1b (view) neurons.
+        """
+        return self._nb_cpu1b
+
+    @property
+    def r_cpu1_view(self):
+        """
+        The CPU1 (view) response rate.
+        """
+        return self._cpu1_view
+
+    @r_cpu1_view.setter
+    def r_cpu1_view(self, v):
+        self._cpu1_view[:] = v[:]
+
+    @property
+    def nb_cpu1_view(self):
+        """
+        The number CPU1 (view) neurons.
+        """
+        return self._nb_cpu1a_view + self._nb_cpu1b_view
+
 
 class FlyCentralComplex(Component):
 
@@ -733,7 +816,7 @@ class FlyCentralComplex(Component):
         """
         kwargs.setdefault('nb_input', nb_compass + nb_nod)
         kwargs.setdefault('nb_output', nb_pfl3)
-        kwargs.setdefault('repeat_rate', 1e-03)
+        kwargs.setdefault('repeat_rate', 1e-01)
         kwargs.setdefault('learning_rule', custom_learning_rule)
         super(FlyCentralComplex, self).__init__(*args, **kwargs)
 
@@ -754,6 +837,7 @@ class FlyCentralComplex(Component):
         self._peg = np.zeros(self.nb_peg, dtype=self.dtype)
         self._pen = np.zeros(self.nb_pen, dtype=self.dtype)
         self._nod = np.zeros(self.nb_nod, dtype=self.dtype)
+        self.__fbn = np.zeros(self.nb_fbn, dtype=self.dtype)  # memory
         self._fbn = np.zeros(self.nb_fbn, dtype=self.dtype)
         self._pfl = np.zeros(self.nb_pfl3, dtype=self.dtype)
         self._dna = np.zeros(self.nb_dna2, dtype=self.dtype)
@@ -786,35 +870,55 @@ class FlyCentralComplex(Component):
             self._w_pfl2dna
         ])
 
-        self.f_cmp = lambda v: v
-        self.f_epg = lambda v: v
-        self.f_peg = lambda v: v
-        self.f_pen = lambda v: v
-        self.f_nod = lambda v: v
-        self.f_fbn = lambda v: v
-        self.f_pfl = lambda v: v
-        self.f_dna = lambda v: v
+        # The cell properties (for sigmoid function)
+        self._cmp_slope = 5.0
+        self._epg_slope = 2.0
+        self._peg_slope = 5.0
+        self._pen_slope = 5.0
+        self._pfl_slope = 5.0
+        self._fbn_slope = 5.0
+        self._nod_slope = 1.0
+        self._dna_slope = 1.0
+
+        self._b_cmp = 2.5
+        self._b_epg = 1.0
+        self._b_peg = 2.5
+        self._b_pen = 3.75
+        self._b_pfl = 5.0
+        self._b_fbn = 2.5
+        self._b_nod = 0.0
+        self._b_dna = 0.0
+
+        self.f_cmp = lambda v: sigmoid(self._cmp_slope * (v - v.min()) / (v.max() - v.min()) - self._b_cmp,
+                                       noise=self._noise, rng=self.rng)
+        self.f_epg = lambda v: sigmoid(self._epg_slope * v - self._b_epg, noise=self._noise, rng=self.rng)
+        self.f_peg = lambda v: sigmoid(self._peg_slope * v - self._b_peg, noise=self._noise, rng=self.rng)
+        self.f_pen = lambda v: sigmoid(self._pen_slope * v - self._b_pen, noise=self._noise, rng=self.rng)
+        self.f_pfl = lambda v: sigmoid(self._pfl_slope * v - self._b_pfl, noise=self._noise, rng=self.rng)
+        self.f_fbn = lambda v: sigmoid(self._fbn_slope * v - self._b_fbn, noise=self._noise, rng=self.rng)
+        self.f_nod = lambda v: relu(self._nod_slope * v - self._b_nod, noise=self._noise, rng=self.rng)
+        self.f_dna = lambda v: sigmoid(self._dna_slope * v - self._b_dna, noise=self._noise, rng=self.rng)
 
         self.reset()
 
     def reset(self):
         # Weight matrices based on anatomy (These are not changeable!)
         self.w_cmp2epg = diagonal_synapses(self.nb_cmp, self.nb_epg, fill_value=1, dtype=self.dtype)
-        self.w_peg2epg = diagonal_synapses(self.nb_peg, self.nb_epg, fill_value=1, tile=True, dtype=self.dtype)
-        self.w_pen2epg = diagonal_synapses(self.nb_pen, self.nb_epg, fill_value=2.5, tile=True, dtype=self.dtype)
+        self.w_peg2epg = diagonal_synapses(self.nb_peg, self.nb_epg, fill_value=.5, tile=True, dtype=self.dtype)
+        self.w_pen2epg = diagonal_synapses(self.nb_pen, self.nb_epg, fill_value=.5, tile=True, dtype=self.dtype)
         self.w_pen2epg[:self.nb_pen//2] = roll_synapses(self.w_pen2epg[:self.nb_pen//2], right=1)
         self.w_pen2epg[self.nb_pen//2:] = roll_synapses(self.w_pen2epg[self.nb_pen//2:], left=1)
-        self.w_epg2epg = diagonal_synapses(self.nb_epg, self.nb_epg, fill_value=.2, dtype=self.dtype) - 0.2
+        self.w_epg2epg = .5 * (diagonal_synapses(self.nb_epg, self.nb_epg, fill_value=1., dtype=self.dtype) - 1.)
         self.w_epg2peg = diagonal_synapses(self.nb_epg, self.nb_peg, fill_value=1., tile=True, dtype=self.dtype)
         self.w_epg2pen = diagonal_synapses(self.nb_epg, self.nb_pen, fill_value=.75, tile=True, dtype=self.dtype)
         self.w_nod2pen = chessboard_synapses(self.nb_nod, self.nb_pen, nb_rows=2, nb_cols=2, fill_value=.75,
                                              dtype=self.dtype)
         self.w_epg2fbn = diagonal_synapses(self.nb_epg, self.nb_fbn, fill_value=1., tile=True, dtype=self.dtype)
-        self.w_nod2fbn = chessboard_synapses(self.nb_nod, self.nb_fbn, nb_rows=2, nb_cols=2, fill_value=-1.,
+        self.w_nod2fbn = chessboard_synapses(self.nb_nod, self.nb_fbn, nb_rows=2, nb_cols=2, fill_value=-1.5,
                                              dtype=self.dtype)
         self.w_pfl2dna2 = chessboard_synapses(self.nb_pfl3, 2, nb_rows=2, nb_cols=2, fill_value=1.,
                                               dtype=self.dtype)
-        self.w_fbn2pfl3 = diagonal_synapses(self.nb_fbn, self.nb_pfl3, fill_value=1., dtype=self.dtype)
+        self.w_fbn2pfl3 = diagonal_synapses(self.nb_fbn, self.nb_pfl3, fill_value=-1., dtype=self.dtype)
         self.w_fbn2pfl3[:self.nb_fbn//2, :self.nb_pfl3//2] = roll_synapses(
             self.w_fbn2pfl3[:self.nb_fbn//2, :self.nb_pfl3//2], left=1)
         self.w_fbn2pfl3[self.nb_fbn//2:, self.nb_pfl3//2:] = roll_synapses(
@@ -825,21 +929,22 @@ class FlyCentralComplex(Component):
             w_epg2pfl3 = np.square(np.sin(np.linspace(0, 2 * np.pi, 16, endpoint=False)))
             w_epg2pfl3[:self.nb_pfl3//2] = np.roll(w_epg2pfl3[:self.nb_pfl3//2], -2)
             w_epg2pfl3[self.nb_pfl3//2:] = np.roll(w_epg2pfl3[self.nb_pfl3//2:], 1)
-            self.w_epg2pfl3 = (diagonal_synapses(self.nb_epg, self.nb_pfl3, fill_value=-1., tile=True, dtype=self.dtype) *
+            self.w_epg2pfl3 = (diagonal_synapses(self.nb_epg, self.nb_pfl3, fill_value=1., tile=True, dtype=self.dtype) *
                                w_epg2pfl3)
-            self.update = False
         else:
-            self.w_epg2pfl3 = diagonal_synapses(self.nb_epg, self.nb_pfl3, fill_value=-.5, tile=True, dtype=self.dtype)
-            self.update = True
+            self.w_epg2pfl3 = diagonal_synapses(self.nb_epg, self.nb_pfl3, fill_value=.5, tile=True, dtype=self.dtype)
 
         self.r_cmp = np.zeros(self.nb_cmp, dtype=self.dtype)
         self.r_epg = np.zeros(self.nb_epg, dtype=self.dtype)
         self.r_peg = np.zeros(self.nb_peg, dtype=self.dtype)
         self.r_pen = np.zeros(self.nb_pen, dtype=self.dtype)
         self.r_nod = np.zeros(self.nb_nod, dtype=self.dtype)
+        self.__fbn = np.full(self.nb_fbn, .0, dtype=self.dtype)
         self.r_fbn = np.zeros(self.nb_fbn, dtype=self.dtype)
         self.r_pfl3 = np.zeros(self.nb_pfl3, dtype=self.dtype)
         self.r_dna2 = np.zeros(self.nb_dna2, dtype=self.dtype)
+
+        self.update = True
 
     def _fprop(self, compass, nod, reinforcement=None):
         """
@@ -859,26 +964,36 @@ class FlyCentralComplex(Component):
             the PFL3 responses that can be used as a steering command
         """
 
-        self._cmp = a_vu = self.f_cmp(compass)
+        self._cmp = a_cmp = self.f_cmp(compass)
         self._nod = a_nod = self.f_nod(nod)
 
-        self._peg = a_peg = self.f_peg(np.dot(self._epg, self.w_epg2peg))
-        self._pen = a_pen = self.f_pen(np.dot(self._epg, self.w_epg2pen) + np.dot(a_nod, self.w_nod2pen))
-        self._epg = a_epg = self.f_epg(np.dot(a_vu, self.w_cmp2epg) +
-                           np.dot(self.r_peg, self.w_peg2epg) +
-                           np.dot(self.r_pen, self.w_pen2epg))
+        self._peg = a_peg = self.f_peg(np.dot(self.r_epg, self.w_epg2peg))
+        self._pen = a_pen = self.f_pen(np.dot(self.r_epg, self.w_epg2pen) +
+                                       np.dot(a_nod, self.w_nod2pen) * a_peg)
 
+        a_epg = (np.dot(a_cmp, self.w_cmp2epg) +
+                 np.dot(self.r_peg, self.w_peg2epg) +
+                 np.dot(self.r_pen, self.w_pen2epg))
         # process the Delta7 feedback as a second step to increase stability
-        self._epg = a_epg = a_epg + np.dot(self.r_epg, self.w_epg2epg)
+        self._epg = a_epg = self.f_epg(a_epg + np.dot(self.r_epg, self.w_epg2epg))
 
-        self._pfl = a_pfl = self.f_pfl(np.dot(a_epg, self.w_epg2pfl3))
-        self._fbn = a_fbn = self.f_fbn(np.dot(a_epg, self.w_epg2fbn) + np.dot(a_nod, self.w_nod2fbn))
+        # memory integration
+        self.__fbn += .05 * (np.dot(a_epg, self.w_epg2fbn) +
+                             np.dot(a_nod, self.w_nod2fbn))
+
+        if self._fixed_pfl3s and not self.update and reinforcement is not None:
+            self._fbn = a_fbn = self.f_fbn(self.__fbn + .05 * reinforcement * np.dot(a_nod, self.w_nod2fbn))
+        else:
+            self._fbn = a_fbn = self.f_fbn(self.__fbn)
+
+        self._pfl = a_pfl = self.f_pfl(np.dot(self.r_epg, self.w_epg2pfl3))
+
         self._dna = a_dna = self.f_dna(np.dot(a_pfl, self.w_pfl2dna2))
 
-        if self.update and reinforcement is not None:
+        if self.update and not self._fixed_pfl3s and reinforcement is not None:
             a_rein = reinforcement * np.dot(a_fbn, self.w_fbn2pfl3)
-            self._w_epg2pfl[:] = self.update_weights(w_pre=self.w_epg2pfl3, r_pre=a_epg, r_post=a_pfl,
-                                                     rein=a_rein, w_rest=0.)
+            self.w_epg2pfl3 = self.update_weights(w_pre=self.w_epg2pfl3, r_pre=a_epg, r_post=a_pfl,
+                                                  rein=a_rein, w_rest=0.)
 
         return a_pfl
 
@@ -1161,7 +1276,7 @@ class FlyCentralComplex(Component):
         return self._nb_dna
 
 
-def custom_learning_rule(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
+def custom_learning_rule(w, r_pre, r_post, rein, learning_rate=1., w_rest=.5):
     if rein.ndim > 1:
         rein = rein[:, np.newaxis, ...]
     else:
@@ -1169,4 +1284,6 @@ def custom_learning_rule(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     d_w = learning_rate * (rein + w_rest)
     if d_w.ndim > 2:
         d_w = d_w.sum(axis=0)
+    d_w = diagonal_synapses(w.shape[0], w.shape[1], fill_value=1., tile=True, dtype=w.dtype) * d_w
+
     return np.clip(w + d_w, 0.2, 0.8)

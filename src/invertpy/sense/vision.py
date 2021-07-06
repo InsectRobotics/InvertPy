@@ -182,6 +182,8 @@ class CompoundEye(Sensor):
             # get the rgb values from the scene and transform them into grey scale given the spectral sensitivity
             rgb = scene(omm_pos_glob, ori=omm_ori_glob, noise=self.noise)
             # transform the rgb into grey scale given the spectral sensitivity
+            if w_c.shape[0] != rgb.shape[0]:
+                w_c = np.vstack([w_c] * (rgb.shape[0] // w_c.shape[0]))
             c[:] = np.sum(rgb * w_c[..., 1:4], axis=1)
 
         # add the contribution of the scene to the input from the sky
