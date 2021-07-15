@@ -1276,6 +1276,463 @@ class FlyCentralComplex(Component):
         return self._nb_dna
 
 
+class VisualCentralComplex(Component):
+
+    def __init__(self, nb_pn, pn_oris=None, nb_fbn=16, nb_tb1=8, nb_cpu1a=14, nb_cpu1b=2, gain=0.05, *args, **kwargs):
+        """
+        The Central Complex model as a component of the locust brain.
+
+        Parameters
+        ----------
+        nb_pn: int, optional
+            the number of (visual) projection neurons.
+        nb_tb1: int, optional
+            the number of TB1 neurons.
+        nb_fbn: int, optional
+            the number of FsB neurons.
+        nb_cpu1: int, optional
+            the number of CPU1a neurons.
+        nb_cpu1b: int, optional
+            the number of CPU1b neurons.
+        gain: float, optional
+            the gain if used as charging speed for the memory.
+        """
+
+        kwargs.setdefault('nb_input', nb_tb1 + nb_pn)
+        kwargs.setdefault('nb_output', nb_cpu1a + nb_cpu1b)
+        kwargs.setdefault('learning_rule', None)
+        super(VisualCentralComplex, self).__init__(*args, **kwargs)
+
+        # set-up the learning speed
+        self._gain = gain
+
+        # set-up parameters
+        self.smoothed_flow = 0.
+        self._pn_ori = pn_oris
+
+        self._nb_pn = nb_pn
+        self._nb_tb1 = nb_tb1
+        self._nb_fbn = nb_fbn
+        self._nb_cpu1a = nb_cpu1a
+        self._nb_cpu1b = nb_cpu1b
+
+        # initialise the responses of the neurons
+        self._pn = np.zeros(self.nb_pn)
+        self._tb1 = np.zeros(self.nb_tb1)
+        self.__fbn = .5 * np.ones(self.nb_fbn)  # FsB memory
+        self._fbn = np.zeros(self.nb_fbn)  # FsB output
+        self._cpu1 = np.zeros(self.nb_cpu1)
+
+        # Weight matrices based on anatomy (These are not changeable!)
+        self._w_pn2fbn = uniform_synapses(self.nb_pn, self.nb_fbn, fill_value=0, dtype=self.dtype)
+        self._w_tb12tb1 = uniform_synapses(self.nb_tb1, self.nb_tb1, fill_value=0, dtype=self.dtype)
+        self._w_tb12fbn = uniform_synapses(self.nb_tb1, self.nb_fbn, fill_value=0, dtype=self.dtype)
+        self._w_tb12cpu1a = uniform_synapses(self.nb_tb1, self.nb_cpu1a, fill_value=0, dtype=self.dtype)
+        self._w_tb12cpu1b = uniform_synapses(self.nb_tb1, self.nb_cpu1b, fill_value=0, dtype=self.dtype)
+        self._w_tn22fbn = uniform_synapses(2, self.nb_fbn, fill_value=0, dtype=self.dtype)
+        self._w_fbn2cpu1a = uniform_synapses(self.nb_fbn, self.nb_cpu1a, fill_value=0, dtype=self.dtype)
+        self._w_fbn2cpu1b = uniform_synapses(self.nb_fbn, self.nb_cpu1b, fill_value=0, dtype=self.dtype)
+        self._w_cpu1a2motor = uniform_synapses(self.nb_cpu1a, 2, fill_value=0, dtype=self.dtype)
+        self._w_cpu1b2motor = uniform_synapses(self.nb_cpu1b, 2, fill_value=0, dtype=self.dtype)
+
+        # The cell properties (for sigmoid function)
+        self._pn_slope = 5.0
+        self._tb1_slope = 5.0
+        self._fbn_slope = 5.0
+        self._cpu1_slope = 5.0  # 7.5
+        self._motor_slope = 1.0
+
+        self._b_pn = 2.5
+        self._b_tb1 = 0.0
+        self._b_fbn = 2.5
+        self._b_cpu1 = 2.5  # -1.0
+        self._b_motor = 3.0
+
+        self.params.extend([
+            self._w_tb12tb1,
+            self._w_tb12fbn,
+            self._w_tb12cpu1a,
+            self._w_tb12cpu1b,
+            self._w_fbn2cpu1a,
+            self._w_fbn2cpu1b,
+            self._w_cpu1a2motor,
+            self._w_cpu1b2motor,
+            self._b_pn,
+            self._b_tb1,
+            self._b_fbn,
+            self._b_cpu1,
+            self._b_motor
+        ])
+
+        self.tl2_prefs = np.tile(np.linspace(0, 2 * np.pi, self.nb_tb1, endpoint=False), 2)
+        # self.tl2_prefs = np.tile(np.linspace(-np.pi, np.pi, self.nb_tb1, endpoint=False), 2)
+
+        self.f_pn = lambda v: sigmoid(v * self._pn_slope - self.b_pn, noise=self._noise, rng=self.rng)
+        self.f_tb1 = lambda v: sigmoid(v * self._tb1_slope - self.b_tb1, noise=self._noise, rng=self.rng)
+        self.f_fbn = lambda v: sigmoid(v * self._fbn_slope - self.b_fbn, noise=self._noise, rng=self.rng)
+        self.f_cpu1 = lambda v: sigmoid(v * self._cpu1_slope - self.b_cpu1, noise=self._noise, rng=self.rng)
+
+        self.reset()
+
+    def reset(self):
+        # Weight matrices based on anatomy (These are not changeable!)
+
+        yaw, _, _ = self._pn_ori.as_euler("ZYX", degrees=False).T
+        self.w_pn2fbn = np.cos(yaw[..., np.newaxis] - self.tl2_prefs[np.newaxis, ...])
+        self.w_tb12tb1 = sinusoidal_synapses(self.nb_tb1, self.nb_tb1, fill_value=-1, dtype=self.dtype)
+        self.w_tb12fbn = diagonal_synapses(self.nb_tb1, self.nb_fbn, fill_value=-1, tile=True, dtype=self.dtype)
+        w_tb12cpu1 = diagonal_synapses(self.nb_tb1, self.nb_cpu1, fill_value=-1, tile=True)
+        self.w_tb12cpu1a = w_tb12cpu1[:, 1:-1]
+        self.w_tb12cpu1b = np.hstack([w_tb12cpu1[:, -1:], w_tb12cpu1[:, :1]])
+        self.w_tn22fbn = chessboard_synapses(2, self.nb_fbn, nb_rows=2, nb_cols=2, fill_value=1,
+                                             dtype=self.dtype)
+
+        w_fbn2cpu1 = opposing_synapses(self.nb_fbn, self.nb_cpu1, fill_value=1, dtype=self.dtype)
+        self.w_fbn2cpu1a = np.hstack([w_fbn2cpu1[:, :self.nb_cpu1a//2], w_fbn2cpu1[:, -self.nb_cpu1a//2:]])
+        self.w_fbn2cpu1b = w_fbn2cpu1[:, [-self.nb_cpu1a//2-1, self.nb_cpu1a//2]]
+
+        self.w_cpu1a2motor = chessboard_synapses(self.nb_cpu1a, 2, nb_rows=2, nb_cols=2, fill_value=1, dtype=self.dtype)
+        self.w_cpu1b2motor = 1 - chessboard_synapses(self.nb_cpu1b, 2, nb_rows=2, nb_cols=2, fill_value=1,
+                                                     dtype=self.dtype)
+
+        self.r_tb1 = np.zeros(self.nb_tb1)
+        self.r_fbn = np.zeros(self.nb_fbn)  # fbn output
+        self.r_cpu1 = np.zeros(self.nb_cpu1)
+        self.__fbn = .5 * np.ones(self.nb_fbn)  # fbn memory
+
+        self.update = True
+
+    def _fprop(self, pn, compass, flow, tl2=None, cl1=None, reinforcement=None):
+
+        self._tb1 = a_tb1 = self.f_tb1(5. * compass[::-1])
+        a_tn1 = self.flow2tn1(flow)
+        a_tn2 = self.flow2tn2(flow)
+
+        # Idealised setup, where we can negate the TB1 sinusoid for memorising backwards motion
+        mem_tn1 = (.5 - a_tn1) @ self.w_tn22fbn  # holonomic
+
+        mem_tb1 = self._gain * (a_tb1 - 1.) @ self.w_tb12fbn
+
+        # Both fbn waves must have same average
+        # If we don't normalise get drift and weird steering
+        mem_tn2 = self._gain * .25 * a_tn2.dot(self.w_tn22fbn)
+
+        mem = mem_tn1 * mem_tb1 - mem_tn2
+
+        rein_mask = np.zeros(self.nb_fbn_view, dtype=self.dtype)
+        if reinforcement is not None:
+            if np.shape(reinforcement)[0] > 1:
+                rein_mask[:self.nb_fbn_view//2] = reinforcement[0]
+                rein_mask[self.nb_fbn_view//2:] = reinforcement[1]
+            else:
+                rein_mask[:] = np.asscalar(reinforcement)
+
+        mem_tb1_view = self._gain * rein_mask * (a_tb1 - 1.) @ self.w_tb12fbn
+
+        mem_view = mem_tn1 * mem_tb1_view - mem_tn2
+
+        fbn_mem = np.clip(self.__fbn + mem, 0., 1.)
+        fbn_mem_view = np.clip(self.__fbn_view + mem_view, 0., 1.)
+
+        if self.update:
+            self.__fbn = fbn_mem
+            self.__fbn_view = fbn_mem_view
+
+        self._fbn = a_fbn = self.f_fbn(fbn_mem)
+        self._fbn_view = a_fbn_view = self.f_fbn(fbn_mem_view)
+
+        if self.pontin:
+            a_pontin = self.f_pontin(a_fbn @ self.w_fbn2pontin)
+            cpu1a = .5 * a_fbn @ self.w_fbn2cpu1a - .5 * a_pontin @ self.w_pontin2cpu1a - a_tb1 @ self.w_tb12cpu1a
+            cpu1b = .5 * a_fbn @ self.w_fbn2cpu1b - .5 * a_pontin @ self.w_pontin2cpu1b - a_tb1 @ self.w_tb12cpu1b
+        else:
+            cpu1a = (a_fbn @ self.w_fbn2cpu1a) * ((a_tb1 - 1.) @ self.w_tb12cpu1a)
+            cpu1a_view = (a_fbn_view @ self.w_fbn2cpu1a) * ((a_tb1 - 1.) @ self.w_tb12cpu1a)
+            cpu1b = (a_fbn @ self.w_fbn2cpu1b) * ((a_tb1 - 1.) @ self.w_tb12cpu1b)
+            cpu1b_view = (a_fbn_view @ self.w_fbn2cpu1b) * ((a_tb1 - 1.) @ self.w_tb12cpu1b)
+
+        self._cpu1 = a_cpu1 = self.f_cpu1(np.hstack([cpu1b[-1], cpu1a, cpu1b[0]]))
+        self._cpu1_view = a_cpu1_view = self.f_cpu1(np.hstack([cpu1b_view[-1], cpu1a_view, cpu1b_view[0]]))
+
+        return a_cpu1 + a_cpu1_view
+
+    def __repr__(self):
+        return "VisualCentralComplex(PN=%d, TB1=%d, FsBN=%d, CPU1=%d)" % (
+            self.nb_pn, self.nb_tb1, self.nb_fbn, self.nb_cpu1
+        )
+
+    def flow2tn1(self, flow):
+        """
+        Linearly inverse sensitive to forwards and backwards motion.
+
+        Parameters
+        ----------
+        flow: np.ndarray
+            the [L, R] optic flow
+
+        Returns
+        -------
+        r_tn1: np.ndarray
+            the responses of the TN1 neurons
+
+        """
+        return np.clip((1. - flow) / 2. + self.rng.normal(scale=self._noise, size=flow.shape), 0, 1)
+
+    def flow2tn2(self, flow):
+        """
+        Linearly sensitive to forwards motion only.
+
+        Parameters
+        ----------
+        flow: np.ndarray
+            the [L, R] optic flow
+
+        Returns
+        -------
+        r_tn2: np.ndarray
+            the responses of the TN2 neurons
+        """
+        return np.clip(flow, 0, 1)
+
+    @property
+    def w_pn2fbn(self):
+        """
+        The PN to FsBN synaptic weights.
+        """
+        return self._w_pn2fbn
+
+    @w_pn2fbn.setter
+    def w_pn2fbn(self, v):
+        self._w_pn2fbn[:] = v[:]
+
+    @property
+    def w_tb12tb1(self):
+        """
+        The TB1 to TB1 synaptic weights.
+        """
+        return self._w_tb12tb1
+
+    @w_tb12tb1.setter
+    def w_tb12tb1(self, v):
+        self._w_tb12tb1[:] = v[:]
+
+    @property
+    def w_tn22fbn(self):
+        """
+        The TN2 to FsBN synaptic weights.
+        """
+        return self._w_tn22fbn
+
+    @w_tn22fbn.setter
+    def w_tn22fbn(self, v):
+        self._w_tn22fbn[:] = v[:]
+
+    @property
+    def w_tb12fbn(self):
+        """
+        The TB1 to FsBN synaptic weights.
+        """
+        return self._w_tb12fbn
+
+    @w_tb12fbn.setter
+    def w_tb12fbn(self, v):
+        self._w_tb12fbn[:] = v[:]
+
+    @property
+    def w_tb12cpu1a(self):
+        """
+        The TB1 to CPU1a synaptic weights.
+        """
+        return self._w_tb12cpu1a
+
+    @w_tb12cpu1a.setter
+    def w_tb12cpu1a(self, v):
+        self._w_tb12cpu1a[:] = v[:]
+
+    @property
+    def w_tb12cpu1b(self):
+        """
+        The TB1 to CPU1b synaptic weights.
+        """
+        return self._w_tb12cpu1b
+
+    @w_tb12cpu1b.setter
+    def w_tb12cpu1b(self, v):
+        self._w_tb12cpu1b[:] = v[:]
+
+    @property
+    def w_fbn2cpu1a(self):
+        """
+        The FsBN to CPU1a synaptic weights.
+        """
+        return self._w_fbn2cpu1a
+
+    @w_fbn2cpu1a.setter
+    def w_fbn2cpu1a(self, v):
+        self._w_fbn2cpu1a[:] = v[:]
+
+    @property
+    def w_fbn2cpu1b(self):
+        """
+        The FsBN to CPU1b synaptic weights.
+        """
+        return self._w_fbn2cpu1b
+
+    @w_fbn2cpu1b.setter
+    def w_fbn2cpu1b(self, v):
+        self._w_fbn2cpu1b[:] = v[:]
+
+    @property
+    def w_cpu1a2motor(self):
+        """
+        Matrix transforming the CPU1a responses to their contribution to the motor commands.
+        """
+        return self._w_cpu1a2motor
+
+    @w_cpu1a2motor.setter
+    def w_cpu1a2motor(self, v):
+        self._w_cpu1a2motor[:] = v[:]
+
+    @property
+    def w_cpu1b2motor(self):
+        """
+        Matrix transforming the CPU1b responses to their contribution to the motor commands.
+        """
+        return self._w_cpu1b2motor
+
+    @w_cpu1b2motor.setter
+    def w_cpu1b2motor(self, v):
+        self._w_cpu1b2motor[:] = v[:]
+
+    @property
+    def b_pn(self):
+        """
+        The PN rest response rate (bias).
+        """
+        return self._b_pn
+
+    @property
+    def b_tb1(self):
+        """
+        The TB1 rest response rate (bias).
+        """
+        return self._b_tb1
+
+    @property
+    def b_fbn(self):
+        """
+        The FsBN rest response rate (bias).
+        """
+        return self._b_fbn
+
+    @property
+    def b_cpu1(self):
+        """
+        The CPU1 rest response rate (bias).
+        """
+        return self._b_cpu1
+
+    @property
+    def b_motor(self):
+        """
+        The motor bias.
+        """
+        return self._b_motor
+
+    @property
+    def r_tb1(self):
+        """
+        The TB1 response rate.
+        """
+        return self._tb1
+
+    @r_tb1.setter
+    def r_tb1(self, v):
+        self._tb1[:] = v[:]
+
+    @property
+    def nb_tb1(self):
+        """
+        The number TB1 neurons.
+        """
+        return self._nb_tb1
+
+    @property
+    def r_pn(self):
+        """
+        The PN response rate.
+        """
+        return self._pn
+
+    @r_pn.setter
+    def r_pn(self, v):
+        self._pn[:] = v[:]
+
+    @property
+    def nb_pn(self):
+        """
+        The number projection neurons.
+        """
+        return self._nb_pn
+
+    @property
+    def r_fbn(self):
+        """
+        The fbn response rate.
+        """
+        return self._fbn
+
+    @r_fbn.setter
+    def r_fbn(self, v):
+        self._fbn[:] = v[:]
+
+    @property
+    def fbn_mem(self):
+        """
+        The FsBN memory.
+        """
+        return self.__fbn
+
+    @property
+    def nb_fbn(self):
+        """
+        The number FsBN neurons.
+        """
+        return self._nb_fbn
+
+    @property
+    def nb_cpu1a(self):
+        """
+        The number CPU1a neurons.
+        """
+        return self._nb_cpu1a
+
+    @property
+    def nb_cpu1b(self):
+        """
+        The number CPU1b neurons.
+        """
+        return self._nb_cpu1b
+
+    @property
+    def r_cpu1(self):
+        """
+        The CPU1 response rate.
+        """
+        return self._cpu1
+
+    @r_cpu1.setter
+    def r_cpu1(self, v):
+        self._cpu1[:] = v[:]
+
+    @property
+    def nb_cpu1(self):
+        """
+        The number CPU1 neurons.
+        """
+        return self._nb_cpu1a + self._nb_cpu1b
+
+
 def custom_learning_rule(w, r_pre, r_post, rein, learning_rate=1., w_rest=.5):
     if rein.ndim > 1:
         rein = rein[:, np.newaxis, ...]
