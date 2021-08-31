@@ -218,6 +218,47 @@ def anti_hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     return w + d_w
 
 
+def infomax(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
+    """
+    The infomax learning rule introduced in [1]_ and used for navigation in [2]_.
+
+        tau * dw / dt = 1 / N * (w - (r_post + r_pre) * r_pre . w
+
+        tau = 1 / learning_rate.
+
+    Parameters
+    ----------
+    w: np.ndarray
+        the current synaptic weights.
+    r_pre: np.ndarray
+        the pre-synaptic responses.
+    r_post: np.ndarray
+        the post-synaptic responses.
+    rein: np.ndarray
+        the reinforcement signal.
+    learning_rate: float, optional
+        the learning rate.
+    w_rest: np.ndarray | float
+        the resting value for the synaptic weights.
+
+    Returns
+    -------
+    w_post: np.ndarray
+        the updated synaptic weights
+
+    Notes
+    -----
+    .. [1] Bell, A. & Sejnowski, T. An information-maximization approach to blind seperation and blind deconvolution.
+    Neural Comput 7, 1129-1159 (1995).
+
+    .. [2] Baddeley, B., Graham, P., Husbands, P. & Philippides, A. A Model of Ant Route Navigation Driven by Scene
+    Familiarity. Plos Comput Biol 8, e1002336 (2012).
+    """
+    d_w = learning_rate * (w - (r_post + r_pre) * np.dot(r_pre, w))
+
+    return w + d_w
+
+
 __learning_rules__ = set(dir()) - __init_dir__
 """
 Names of all the learning rules in this package. 
