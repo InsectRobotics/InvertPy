@@ -171,8 +171,8 @@ class CompoundEye(Sensor):
         c = np.full(len(self._omm_ori), np.nan, dtype=self.dtype)
 
         if sky is not None:
-            # the brightness of the environment can be calculated given the sun position
-            br = np.clip(np.sin(sky.theta_s), 0.1, 1)
+            # # the brightness of the environment can be calculated given the sun position
+            # br = np.clip(np.sin(sky.theta_s), 0.1, 1)
             # get the sky contribution
             y[:], p[:], a[:] = sky(omm_ori_glob, irgbu=w_c, noise=self.noise)
 
@@ -215,6 +215,7 @@ class CompoundEye(Sensor):
         a0 = np.ma.average(a_masked, axis=0, weights=w_gau)
         # transform the complex number back to an angle
         a0 = (np.angle(a0) + np.pi) % (2 * np.pi) - np.pi
+        a0[a0 == np.ma.masked] = 0.
 
         y0 = y0.reshape((-1, 1))
         p0 = p0.reshape((-1, 1))
