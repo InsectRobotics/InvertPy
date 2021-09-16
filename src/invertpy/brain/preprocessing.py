@@ -13,14 +13,15 @@ __license__ = "MIT"
 __version__ = "v1.0.0-alpha"
 __maintainer__ = "Evripidis Gkanias"
 
-from abc import ABC
-
 from invertpy.sense import CompoundEye
 
 from .component import Component
 from .synapses import whitening_synapses, dct_synapses, mental_rotation_synapses
 from .activation import softmax
 from ._helpers import whitening, pca, eps
+
+from abc import ABC
+from math import factorial
 
 import numpy as np
 
@@ -249,6 +250,176 @@ class DiscreteCosineTransform(Preprocessing):
     def __repr__(self):
         return "DiscreteCosineTransform(in=%d, out=%d, calibrated=%s)" % (
             self._nb_input, self._nb_output, self.calibrated
+        )
+
+
+class ZernikeMoments(Preprocessing):
+    N_MAX = 60
+    M_MAX = 20
+    P_MAX = int(N_MAX / 2)
+    Q_MAX = int((N_MAX + M_MAX) / 2)
+
+    FAC_S = np.zeros([P_MAX + 1])
+    for s in range(P_MAX + 1):
+        FAC_S[s] = factorial(s)
+
+    FAC_N_S = np.zeros([N_MAX, P_MAX + 1])
+    for n in range(N_MAX):
+        for s in range(int(n / 2) + 1):
+            FAC_N_S[n, s] = factorial(n - s)
+
+    FAC_Q_S = np.zeros([Q_MAX, P_MAX + 1])
+    for q in range(Q_MAX):
+        for s in range(np.min([q + 1, P_MAX + 1])):
+            FAC_Q_S[q, s] = factorial(q - s)
+
+    FAC_P_S = np.zeros([P_MAX, P_MAX + 1])
+    for p in range(P_MAX):
+        for s in range(p + 1):
+            FAC_P_S[p, s] = factorial(p - s)
+
+    def __init__(self, ori, repeat, order, out_type="amplitude", degrees=False, *args, **kwargs):
+        """
+        A preprocessing component that transforms the input into the frequency domain by using the Discrete Cosine
+        Transform (DCT) method.
+        """
+        kwargs.setdefault("nb_input", np.shape(ori)[0])
+        kwargs.setdefault("nb_output", np.shape(ori)[0])
+        super().__init__(*args, **kwargs)
+
+        phi, theta, _ = ori.as_euler("ZYX", degrees=False)
+
+        self._phi = phi
+        """
+        The azimuth of the ommatidia.
+        """
+        self._theta = np.pi/2 - theta
+        """
+        The zenith angle of the ommatidia.
+        """
+
+        self._n = order
+        """
+        The repeat.
+        """
+        self._m = repeat
+        """
+        The order.
+        """
+        self._degrees = degrees
+
+        self._z = np.zeros(self._theta.shape, dtype=complex)
+        """
+        The Zernike moments.
+        """
+        self._a = np.zeros(self._theta.shape, dtype=self.dtype)
+        """
+        The amplitude of the the moments.
+        """
+        self._phase = np.zeros(self._theta.shape, dtype=self.dtype)
+        """
+        The phase of the the moments.
+        """
+        self._out_type = out_type
+        """
+        The type of the output.
+        """
+        self.__moments = np.zeros((self._nb_input, self._nb_input), dtype=complex)
+        """
+        The default Zernike moments
+        """
+        self.__cnt = -1
+        """
+        The number of pixels inside the unit circle
+        """
+
+        self.reset()
+
+    def reset(self):
+        """
+        Resets the DCT parameters.
+        """
+        # get the radial polynomial
+        rad = self.radial_poly(self._theta, self._n, self._m)
+
+        # calculate the moments
+        self.__moments[:] = rad * np.exp(-1j * self._m * self._phi)
+
+        # count the number of pixels inside the unit circle
+        self.__cnt = np.count_nonzero(self._theta) + 1
+
+    def _fprop(self, x):
+        """
+        Decomposes the input signal to the the different phases of the cosine function.
+
+        Parameters
+        ----------
+        x: np.ndarray[float]
+            the raw signal that needs to be transformed
+
+        Returns
+        -------
+        np.ndarray[float]
+            the signal in the frequency domain
+        """
+
+        # calculate the moments
+        z = np.sum(x * self.__moments)
+
+        # normalize the amplitude of moments
+        self._z = (self._n + 1) * z / self.__cnt
+
+        if "amplitude" in self._out_type:
+            return self.z_amplitude
+        elif "phase" in self._out_type:
+            return self.z_phase
+        else:
+            return self.z_moments
+
+    def radial_poly(self, radius, order, repeat):
+        rad = np.zeros((radius.shape, radius.shape), dtype=self.dtype)
+        p = int((order - np.absolute(order)) / 2)
+        q = int((order + np.absolute(order)) / 2)
+        for s in range(p + 1):
+            c = np.power(-1, s) * ZernikeMoments.FAC_N_S[order, s]
+            c /= ZernikeMoments.FAC_S[s] * ZernikeMoments.FAC_Q_S[q, s] * ZernikeMoments.FAC_P_S[p, s]
+            rad += c * np.power(repeat, order - 2 * s)
+        return rad
+
+    @property
+    def calibrated(self):
+        """
+        True if the DCT parameters have been calculated, False otherwise.
+
+        Returns
+        -------
+        bool
+        """
+        return self.__cnt >= 0
+
+    @property
+    def order(self):
+        return self._m
+
+    @property
+    def repeat(self):
+        return self._n
+
+    @property
+    def z_moments(self):
+        return self._z
+
+    @property
+    def z_amplitude(self):
+        return np.absolute(self._z)
+
+    @property
+    def z_phase(self):
+        return np.angle(self._z)
+
+    def __repr__(self):
+        return "ZernikeMoments(in=%d, out=%d, type=%s, order=%d, repeat=%d, calibrated=%s)" % (
+            self._nb_input, self._nb_output, self._out_type, self.order, self.repeat, self.calibrated
         )
 
 
