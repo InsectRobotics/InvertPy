@@ -583,8 +583,8 @@ def encode_sph(theta, phi=None, length=8):
 
     Returns
     -------
-    I: np.ndarray
-        the array of responses representing the given spherical coordinates.
+    np.ndarray[float]
+        I - the array of responses representing the given spherical coordinates.
     """
     if phi is None:
         if not isinstance(theta, float) and theta.shape[0] > 1:
@@ -604,13 +604,13 @@ def decode_sph(I):
 
     Parameters
     ----------
-    I: np.ndarray
+    I: np.ndarray[float]
         the array of responses representing spherical coordinates.
 
     Returns
     -------
-    theta, phi: np.ndarray
-        the spherical coordinates calculated using the input population codes.
+    np.ndarray[float]
+        theta, phi - the spherical coordinates calculated using the input population codes.
     """
     fund_freq = np.fft.fft(I)[1]
     phi = (np.pi - np.angle(np.conj(fund_freq))) % (2 * np.pi) - np.pi
@@ -618,22 +618,24 @@ def decode_sph(I):
     return np.array([theta, phi])
 
 
-def decode_xy(I):
+def decode_z(I):
     """
-    Creates a 2D vector showing the direction of a vector represented by a given array of responses (population code).
+    Creates 2D vectors (complex numbers) showing the direction of the vectors represented by given arrays of responses
+    (population codes).
 
     Parameters
     ----------
-    I: np.ndarray
+    I: np.ndarray[float]
         the array of responses representing 2D vector.
 
     Returns
     -------
-    xy: np.ndarray
-        the 2D vectors calculated using the input population codes.
+    np.ndarray[complex]
+        (x + j * y) - the 2D vectors as complex numbers calculated using the input population codes.
     """
     length = I.shape[-1]
     alpha = np.linspace(0, 2 * np.pi, length, endpoint=False)
-    x = np.sum(I * np.cos(alpha), axis=-1)[..., np.newaxis]
-    y = np.sum(I * np.sin(alpha), axis=-1)[..., np.newaxis]
-    return np.concatenate((x, y), axis=-1)
+    vectors = np.cos(alpha) + 1j * np.sin(alpha)
+    z = np.sum(I * vectors, axis=-1)
+
+    return z
