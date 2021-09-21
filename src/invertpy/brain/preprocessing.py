@@ -22,6 +22,7 @@ from ._helpers import whitening, pca, eps
 
 from abc import ABC
 from math import factorial
+from scipy.spatial.transform import Rotation
 
 import numpy as np
 
@@ -256,101 +257,92 @@ class DiscreteCosineTransform(Preprocessing):
 class ZernikeMoments(Preprocessing):
     N_MAX = 60
     M_MAX = 20
-    P_MAX = int(N_MAX / 2)
-    Q_MAX = int((N_MAX + M_MAX) / 2)
 
-    FAC_S = np.zeros([P_MAX + 1])
-    for s in range(P_MAX + 1):
-        FAC_S[s] = factorial(s)
-
-    FAC_N_S = np.zeros([N_MAX, P_MAX + 1])
-    for n in range(N_MAX):
-        for s in range(int(n / 2) + 1):
-            FAC_N_S[n, s] = factorial(n - s)
-
-    FAC_Q_S = np.zeros([Q_MAX, P_MAX + 1])
-    for q in range(Q_MAX):
-        for s in range(np.min([q + 1, P_MAX + 1])):
-            FAC_Q_S[q, s] = factorial(q - s)
-
-    FAC_P_S = np.zeros([P_MAX, P_MAX + 1])
-    for p in range(P_MAX):
-        for s in range(p + 1):
-            FAC_P_S[p, s] = factorial(p - s)
-
-    def __init__(self, ori, repeat, order, out_type="amplitude", degrees=False, *args, **kwargs):
+    def __init__(self, ori, order=16, out_type="amplitude", degrees=False, *args, **kwargs):
         """
-        A preprocessing component that transforms the input into the frequency domain by using the Discrete Cosine
-        Transform (DCT) method.
+        A preprocessing component that transforms the input into the frequency domain by using the Zernike Moments (ZM)
+        method. The Zernike Moments are used widely for rotation invariant preprocessing and they are particularly
+        convenient for the insect panoramic vision, as they work best with polar coordinates.
+
+        Parameters
+        ----------
+        ori : Rotation
+            the relative orientation of the ommatidia of interest
+        order : int
+            the maximum order of the Zernike Moments to calculate. Default is 16
+        out_type : {"amplitude", "phase", "raw"}
+            defines the output type of call function; one of "amplitude", "phase" or "raw". Default is "amplitude"
+        degrees : bool
+            defines if the input and output angles will be in degrees or not. Default is False
         """
         kwargs.setdefault("nb_input", np.shape(ori)[0])
-        kwargs.setdefault("nb_output", np.shape(ori)[0])
+        if order % 2:
+            nb_coeff = int(((1 + order) / 2) * ((3 + order) / 2))
+        else:
+            nb_coeff = int(np.square(order / 2. + 1))
+        kwargs.setdefault("nb_output", nb_coeff)
         super().__init__(*args, **kwargs)
 
-        phi, theta, _ = ori.as_euler("ZYX", degrees=False)
+        phi, theta, _ = ori.as_euler("ZYX", degrees=False).T
 
         self._phi = phi
-        """
-        The azimuth of the ommatidia.
-        """
-        self._theta = np.pi/2 - theta
-        """
-        The zenith angle of the ommatidia.
-        """
+        self._rho = (np.pi/2 - theta) / np.pi
+        self._phi -= np.absolute(np.where(self._rho <= 1, 0, 1) * np.pi)
+        self._rho = np.absolute(np.where(self._rho <= 1, 1, -1) * self._rho)
 
         self._n = order
-        """
-        The repeat.
-        """
-        self._m = repeat
-        """
-        The order.
-        """
         self._degrees = degrees
+        """
+        Whether to get and set values in degrees.
+        """
 
-        self._z = np.zeros(self._theta.shape, dtype=complex)
-        """
-        The Zernike moments.
-        """
-        self._a = np.zeros(self._theta.shape, dtype=self.dtype)
-        """
-        The amplitude of the the moments.
-        """
-        self._phase = np.zeros(self._theta.shape, dtype=self.dtype)
-        """
-        The phase of the the moments.
-        """
+        self._z = np.zeros(self._nb_output, dtype=complex)
         self._out_type = out_type
         """
         The type of the output.
-        """
-        self.__moments = np.zeros((self._nb_input, self._nb_input), dtype=complex)
-        """
-        The default Zernike moments
         """
         self.__cnt = -1
         """
         The number of pixels inside the unit circle
         """
 
+        # Pre-calculate the factorial to improve the speed
+        p_max = int(self.N_MAX / 2)
+        q_max = int((self.N_MAX + self.M_MAX) / 2)
+
+        self.__FAC_S = np.zeros([p_max + 1])
+        for s in range(p_max + 1):
+            self.__FAC_S[s] = factorial(s)
+
+        self.__FAC_N_S = np.zeros([self.N_MAX, p_max + 1])
+        for n in range(self.N_MAX):
+            for s in range(int(n / 2) + 1):
+                self.__FAC_N_S[n, s] = factorial(n - s)
+
+        self.__FAC_Q_S = np.zeros([q_max, p_max + 1])
+        for q in range(q_max):
+            for s in range(np.min([q + 1, p_max + 1])):
+                self.__FAC_Q_S[q, s] = factorial(q - s)
+
+        self.__FAC_P_S = np.zeros([p_max, p_max + 1])
+        for p in range(p_max):
+            for s in range(p + 1):
+                self.__FAC_P_S[p, s] = factorial(p - s)
+
         self.reset()
 
     def reset(self):
         """
-        Resets the DCT parameters.
+        Resets the ZM parameters.
         """
-        # get the radial polynomial
-        rad = self.radial_poly(self._theta, self._n, self._m)
-
-        # calculate the moments
-        self.__moments[:] = rad * np.exp(-1j * self._m * self._phi)
+        self._z = np.zeros(self._nb_output, dtype=complex)
 
         # count the number of pixels inside the unit circle
-        self.__cnt = np.count_nonzero(self._theta) + 1
+        self.__cnt = np.count_nonzero(self._rho) + 1
 
     def _fprop(self, x):
         """
-        Decomposes the input signal to the the different phases of the cosine function.
+        Decomposes the input signal to the the different phases of the Zernike moments.
 
         Parameters
         ----------
@@ -363,11 +355,16 @@ class ZernikeMoments(Preprocessing):
             the signal in the frequency domain
         """
 
-        # calculate the moments
-        z = np.sum(x * self.__moments)
-
-        # normalize the amplitude of moments
-        self._z = (self._n + 1) * z / self.__cnt
+        i = 0
+        for n in range(self.order + 1):
+            for m in range(n + 1):
+                if (n - np.absolute(m)) % 2 == 0:
+                    self._z[i] = self.calculate_moment(x, n, m)
+                    i += 1  # process the next moment
+                if i >= self._nb_output:
+                    break
+            if i >= self._nb_output:
+                break
 
         if "amplitude" in self._out_type:
             return self.z_amplitude
@@ -376,20 +373,91 @@ class ZernikeMoments(Preprocessing):
         else:
             return self.z_moments
 
-    def radial_poly(self, radius, order, repeat):
-        rad = np.zeros((radius.shape, radius.shape), dtype=self.dtype)
-        p = int((order - np.absolute(order)) / 2)
-        q = int((order + np.absolute(order)) / 2)
+    def calculate_moment(self, x, order, repeat):
+        """
+        Calculates and returns the Zernike moment for the given input.
+
+        Parameters
+        ----------
+        x : np.ndarray[float]
+            the input intensities of the given ommatidia orientations.
+        order : int
+            the order of Zernike Moments that we are interested in.
+        repeat : int
+            the repeat of the order that we are interested in.
+
+        Returns
+        -------
+        complex
+            the Zernike moment for the given input
+        """
+        # get the Zernike polynomials
+        Z = self.zernike_poly(self._rho, self._phi, order, repeat)
+
+        # calculate the moments
+        z = x @ Z
+
+        # normalize the amplitude of moments
+        z = (self._n + 1) * z / self.__cnt
+
+        return z
+
+    def zernike_poly(self, rho, phi, order, repeat):
+        """
+        Calculates and returns the Zernike polynomials for the given input.
+
+        The return values are complex: their real part represents the odd function over the azimuthal angle,
+        while their imaginary part represents the respective even function.
+
+        Parameters
+        ----------
+        rho : np.ndarray[float]
+            the radius of interest
+        phi : np.ndarray[float]
+            the azimuth of interest
+        order : int
+            the order of interest
+        repeat : int
+            the repeat of interest
+
+        Returns
+        -------
+        np.ndarray[complex]
+            the Zernike polynomials for the given input
+        """
+        return self.radial_poly(rho, order, repeat) * np.exp(-1j * repeat * phi)
+
+    def radial_poly(self, rho, order, repeat):
+        """
+        Calculates and returns the radial polynomials for the given input.
+
+        Parameters
+        ----------
+        rho : np.ndarray[float]
+            the radius of interest
+        order : int
+            the order of interest
+        repeat : int
+            the repeat of interest
+
+        Returns
+        -------
+        np.ndarray[float]
+            the radial polynomials for the given input
+        """
+        rad = np.zeros(rho.shape, dtype=rho.dtype)
+        p = int((order - np.absolute(repeat)) / 2)
+        q = int((order + np.absolute(repeat)) / 2)
         for s in range(p + 1):
-            c = np.power(-1, s) * ZernikeMoments.FAC_N_S[order, s]
-            c /= ZernikeMoments.FAC_S[s] * ZernikeMoments.FAC_Q_S[q, s] * ZernikeMoments.FAC_P_S[p, s]
-            rad += c * np.power(repeat, order - 2 * s)
+            c = np.power(-1, s) * self.__FAC_N_S[order, s]
+            c /= self.__FAC_S[s] * self.__FAC_Q_S[q, s] * self.__FAC_P_S[p, s]
+            rad += c * np.power(rho, order - 2 * s)
         return rad
 
     @property
     def calibrated(self):
         """
-        True if the DCT parameters have been calculated, False otherwise.
+        True if the ZM parameters have been calculated, False otherwise.
 
         Returns
         -------
@@ -399,27 +467,73 @@ class ZernikeMoments(Preprocessing):
 
     @property
     def order(self):
-        return self._m
+        """
+        The maximum order of the Zernike Moments.
 
-    @property
-    def repeat(self):
+        Returns
+        -------
+        int
+        """
         return self._n
 
     @property
+    def phi(self):
+        """
+        The azimuth of the target intensities.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._phi
+
+    @property
+    def rho(self):
+        """
+        The radius of the target intensities is the normalised zenith angle of the given ommatidia orientations.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._rho
+
+    @property
     def z_moments(self):
+        """
+        The computed Zernike Moments for the last input.
+
+        Returns
+        -------
+        np.ndarray[complex]
+        """
         return self._z
 
     @property
     def z_amplitude(self):
+        """
+        The amplitude of the lastly-calculated Zernike Moments.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
         return np.absolute(self._z)
 
     @property
     def z_phase(self):
+        """
+        The phase of the lastly-calculated Zernike Moments.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
         return np.angle(self._z)
 
     def __repr__(self):
-        return "ZernikeMoments(in=%d, out=%d, type=%s, order=%d, repeat=%d, calibrated=%s)" % (
-            self._nb_input, self._nb_output, self._out_type, self.order, self.repeat, self.calibrated
+        return "ZernikeMoments(in=%d, out=%d, type=%s, order=%d, calibrated=%s)" % (
+            self._nb_input, self._nb_output, self._out_type, self.order, self.calibrated
         )
 
 
