@@ -568,7 +568,7 @@ def ori2cross(nb_ommatidia, nb_receptors=2, dtype='float32'):
     return ori_cross
 
 
-def encode_sph(theta, phi=None, length=8):
+def sph2ring(theta, phi=None, length=8, axis=-1):
     """
     Creates an array of responses (population code) representing the spherical coordinates.
 
@@ -580,6 +580,8 @@ def encode_sph(theta, phi=None, length=8):
         the azimuth of the point(s).
     length: int, optional
         the size of the output population (array).
+    axis: int
+        the axis to apply the calculations on.
 
     Returns
     -------
@@ -598,7 +600,7 @@ def encode_sph(theta, phi=None, length=8):
     return np.sin(alpha + phi + np.pi / 2) * theta / (length / 2.)
 
 
-def decode_sph(I):
+def ring2sph(I, axis=-1):
     """
     Creates the spherical coordinates given an array of responses (population code).
 
@@ -606,19 +608,21 @@ def decode_sph(I):
     ----------
     I: np.ndarray[float]
         the array of responses representing spherical coordinates.
+    axis: int
+        the axis to apply the calculations on.
 
     Returns
     -------
     np.ndarray[float]
         theta, phi - the spherical coordinates calculated using the input population codes.
     """
-    fund_freq = np.fft.fft(I)[1]
+    fund_freq = np.fft.fft(I, axis=axis)[1]
     phi = (np.pi - np.angle(np.conj(fund_freq))) % (2 * np.pi) - np.pi
     theta = np.absolute(fund_freq)
     return np.array([theta, phi])
 
 
-def decode_z(I):
+def ring2complex(I, axis=-1):
     """
     Creates 2D vectors (complex numbers) showing the direction of the vectors represented by given arrays of responses
     (population codes).
@@ -627,15 +631,17 @@ def decode_z(I):
     ----------
     I: np.ndarray[float]
         the array of responses representing 2D vector.
+    axis: int
+        the axis to apply the calculations on.
 
     Returns
     -------
     np.ndarray[complex]
         (x + j * y) - the 2D vectors as complex numbers calculated using the input population codes.
     """
-    length = I.shape[-1]
+    length = I.shape[axis]
     alpha = np.linspace(0, 2 * np.pi, length, endpoint=False)
     vectors = np.cos(alpha) + 1j * np.sin(alpha)
-    z = np.sum(I * vectors, axis=-1)
+    z = np.sum(I * vectors, axis=axis)
 
     return z

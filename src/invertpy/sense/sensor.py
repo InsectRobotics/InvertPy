@@ -172,6 +172,21 @@ class Sensor(object):
         """
         return self._xyz
 
+    @xyz.setter
+    def xyz(self, v):
+        """
+        The position of the agent.
+
+        Parameters
+        ----------
+        v: np.ndarray[float]
+
+        See Also
+        --------
+        Agent.position
+        """
+        self.translate(np.array(v, dtype=self.dtype) - self._xyz)
+
     @property
     def x(self):
         """
@@ -199,6 +214,19 @@ class Sensor(object):
         The 3D orientation of the sensor.
         """
         return self._ori
+
+    @ori.setter
+    def ori(self, v):
+        """
+        Parameters
+        ----------
+        v: R
+
+        See Also
+        --------
+        Agent.orientation
+        """
+        self.rotate(d_ori=self._ori.inv() * v)
 
     @property
     def euler(self):
