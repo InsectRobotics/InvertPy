@@ -45,6 +45,14 @@ class Preprocessing(Component, ABC):
     def __repr__(self):
         return "Preprocessing(in=%d, out=%d)" % (self._nb_input, self._nb_output)
 
+    @property
+    def nb_input(self):
+        return self._nb_input
+
+    @property
+    def nb_output(self):
+        return self._nb_output
+
 
 class Whitening(Preprocessing):
     def __init__(self, *args, samples=None, w_method=pca, **kwargs):
@@ -223,7 +231,7 @@ class DiscreteCosineTransform(Preprocessing):
         np.ndarray[float]
             the signal in the frequency domain
         """
-        return self._f_dct(x @ self._w_dct)
+        return self._f_dct(np.dot(x, self._w_dct))
 
     @property
     def calibrated(self):
@@ -424,7 +432,7 @@ class ZernikeMoments(Preprocessing):
 
 
 class MentalRotation(Preprocessing):
-    def __init__(self, *args, nb_input=None, nb_output=8, eye=None, sigma=.02, **kwargs):
+    def __init__(self, *args, nb_input=None, nb_output=8, eye=None, pref_angles=None, sigma=.02, **kwargs):
         """
         Performs mental rotation of the visual input into a fixed number of preferred angles (nb_output).
         This is done through a number of map from each ommatidium to every other ommatidium that is positioned
@@ -441,11 +449,13 @@ class MentalRotation(Preprocessing):
             number of output orientations. Default is 8
         eye: CompoundEye, optional
             compound eye which will be used to compute the parameters. Default is None
+        pref_angles: np.ndarray[float], optional
+            the preferred angles for the rotation. Default is uniform orientations based on the nb_output
         sigma: float, optional
             mental radius of each ommatidium (percentile). Default is 0.02
         """
-        assert nb_input is None and eye is None, ("You should specify the input either by the 'nb_input' or the 'eye' "
-                                                  "attribute.")
+        assert nb_input is not None or eye is not None, (
+            "You should specify the input either by the 'nb_input' or the 'eye' attribute.")
         if eye is not None:
             nb_input = eye.nb_ommatidia
         super().__init__(*args, nb_input=nb_input, nb_output=nb_output, **kwargs)
@@ -470,6 +480,13 @@ class MentalRotation(Preprocessing):
         The mental radius of each ommatidium.
         """
 
+        self._pref_angles = pref_angles
+        """
+        The preferred angles of the mental rotation.
+        """
+        if pref_angles is None:
+            self._pref_angles = np.linspace(0, 2 * np.pi, nb_output, endpoint=False)
+
         self.params.append(self._w_rot)
         self.reset(eye)
 
@@ -485,7 +502,8 @@ class MentalRotation(Preprocessing):
         if eye is not None:
             self._omm_ori = eye.omm_ori
         if self._omm_ori is not None:
-            self._w_rot[:] = mental_rotation_synapses(self._omm_ori, self._nb_output, sigma=self._sigma)
+            self._w_rot[:] = mental_rotation_synapses(self._omm_ori, self._nb_output,
+                                                      phi_out=self._pref_angles, sigma=self._sigma)
 
     def _fprop(self, x):
         """
@@ -504,7 +522,7 @@ class MentalRotation(Preprocessing):
             - N: number of inputs / ommatidia
             - M: number of output mental rotations / preferred angles
         """
-        return self._f_rot(x @ self._w_rot)
+        return self._f_rot(np.dot(x, self._w_rot).T)
 
     @property
     def w_rot(self):
@@ -521,6 +539,17 @@ class MentalRotation(Preprocessing):
         return self._w_rot
 
     @property
+    def pref_angles(self):
+        """
+        List of the preference angles that mental rotation will be applied to.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._pref_angles
+
+    @property
     def sigma(self):
         """
         The mental radius of each ommatidium (percentile).
@@ -530,4 +559,3 @@ class MentalRotation(Preprocessing):
         float
         """
         return self._sigma
-

@@ -60,9 +60,15 @@ def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     w_post: np.ndarray
         the updated synaptic weights
     """
-    dop_fact = rein[np.newaxis, ...]
+    if rein.ndim > 1:
+        dop_fact = rein[:, np.newaxis, ...]
+    else:
+        dop_fact = rein[np.newaxis, ...]
     r_pre = r_pre[..., np.newaxis]
-    return w + learning_rate * dop_fact * (r_pre + w - w_rest)
+    d_w = learning_rate * dop_fact * (r_pre + w - w_rest)
+    if d_w.ndim > 2:
+        d_w = d_w.sum(axis=0)
+    return w + d_w
 
 
 def prediction_error(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
@@ -102,10 +108,17 @@ def prediction_error(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     .. [1] Rescorla, R. A. & Wagner, A. R. A theory of Pavlovian conditioning: Variations in the effectiveness of
        reinforcement and nonreinforcement. in 64–99 (Appleton-Century-Crofts, 1972).
     """
-    rein = rein[np.newaxis, ...]
+    if rein.ndim > 1:
+        rein = rein[:, np.newaxis, ...]
+        r_post = r_post[:, np.newaxis, ...]
+    else:
+        rein = rein[np.newaxis, ...]
+        r_post = r_post[np.newaxis, ...]
     r_pre = r_pre[..., np.newaxis]
-    r_post = r_post[np.newaxis, ...]
-    return w + learning_rate * r_pre * (rein - r_post + w_rest)
+    d_w = learning_rate * r_pre * (rein - r_post + w_rest)
+    if d_w.ndim > 2:
+        d_w = d_w.sum(axis=0)
+    return w + d_w
 
 
 def hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
@@ -144,10 +157,17 @@ def hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     .. [1] Hebb, D. O. The organization of behavior: A neuropsychological theory. (Psychology Press, 2005).
 
     """
-    rein = rein[np.newaxis, ...]
+    if rein.ndim > 1:
+        rein = rein[:, np.newaxis, ...]
+        r_post = r_post[:, np.newaxis, ...]
+    else:
+        rein = rein[np.newaxis, ...]
+        r_post = r_post[np.newaxis, ...]
     r_pre = r_pre[..., np.newaxis]
-    r_post = r_post[np.newaxis, ...]
-    return w + learning_rate * (rein * np.outer(r_pre, r_post) + w_rest)
+    d_w = learning_rate * (rein * np.outer(r_pre, r_post) + w_rest)
+    if d_w.ndim > 2:
+        d_w = d_w.sum(axis=0)
+    return w + d_w
 
 
 def anti_hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
@@ -186,9 +206,57 @@ def anti_hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     .. [1] Smith, D., Wessnitzer, J. & Webb, B. A model of associative learning in the mushroom body. Biol Cybern 99,
        89–103 (2008).
     """
-    rein = np.maximum(rein[np.newaxis, ...], 0)
+    if rein.ndim > 1:
+        rein = rein[:, np.newaxis, ...]
+    else:
+        rein = rein[np.newaxis, ...]
+    rein = np.maximum(rein, 0)
     r_pre = r_pre[..., np.newaxis]
-    return w + learning_rate * (-rein * (r_pre * w) + w_rest)
+    d_w = learning_rate * (-rein * (r_pre * w) + w_rest)
+    if d_w.ndim > 2:
+        d_w = d_w.sum(axis=0)
+    return w + d_w
+
+
+def infomax(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
+    """
+    The infomax learning rule introduced in [1]_ and used for navigation in [2]_.
+
+        tau * dw / dt = 1 / N * (w - (r_post + r_pre) * r_pre . w
+
+        tau = 1 / learning_rate.
+
+    Parameters
+    ----------
+    w: np.ndarray
+        the current synaptic weights.
+    r_pre: np.ndarray
+        the pre-synaptic responses.
+    r_post: np.ndarray
+        the post-synaptic responses.
+    rein: np.ndarray
+        the reinforcement signal.
+    learning_rate: float, optional
+        the learning rate.
+    w_rest: np.ndarray | float
+        the resting value for the synaptic weights.
+
+    Returns
+    -------
+    w_post: np.ndarray
+        the updated synaptic weights
+
+    Notes
+    -----
+    .. [1] Bell, A. & Sejnowski, T. An information-maximization approach to blind seperation and blind deconvolution.
+    Neural Comput 7, 1129-1159 (1995).
+
+    .. [2] Baddeley, B., Graham, P., Husbands, P. & Philippides, A. A Model of Ant Route Navigation Driven by Scene
+    Familiarity. Plos Comput Biol 8, e1002336 (2012).
+    """
+    d_w = learning_rate * (w - (r_post + r_pre) * np.dot(r_pre, w))
+
+    return w + d_w
 
 
 __learning_rules__ = set(dir()) - __init_dir__

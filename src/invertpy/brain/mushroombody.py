@@ -21,9 +21,10 @@ from ._helpers import eps
 from .component import Component
 from .plasticity import dopaminergic, anti_hebbian
 from .synapses import uniform_synapses, diagonal_synapses, sparse_synapses, opposing_synapses, roll_synapses
-from .activation import relu, winner_takes_all
+from .activation import linear, relu, winner_takes_all
 
 from sklearn.metrics import mean_squared_error
+from copy import copy
 
 import numpy as np
 
@@ -97,12 +98,12 @@ class MushroomBody(Component):
                             self.w_d2m, self.w_rest, self.b_k, self.b_m, self.b_d, self.b_a])
 
         # reserve space for the responses
-        self._cs = np.zeros((self._repeats, nb_cs), dtype=self.dtype)
-        self._us = np.zeros((self._repeats, nb_us), dtype=self.dtype)
-        self._dan = np.zeros((self._repeats, nb_dan), dtype=self.dtype)
-        self._kc = np.zeros((self._repeats, nb_kc), dtype=self.dtype)
-        self._apl = np.zeros((self._repeats, nb_apl), dtype=self.dtype)
-        self._mbon = np.zeros((self._repeats, nb_mbon), dtype=self.dtype)
+        self._cs = np.zeros((self._repeats, self.neuron_dims, nb_cs), dtype=self.dtype)
+        self._us = np.zeros((self._repeats, self.neuron_dims, nb_us), dtype=self.dtype)
+        self._dan = np.zeros((self._repeats, self.neuron_dims, nb_dan), dtype=self.dtype)
+        self._kc = np.zeros((self._repeats, self.neuron_dims, nb_kc), dtype=self.dtype)
+        self._apl = np.zeros((self._repeats, self.neuron_dims, nb_apl), dtype=self.dtype)
+        self._mbon = np.zeros((self._repeats, self.neuron_dims, nb_mbon), dtype=self.dtype)
 
         self._nb_cs = nb_cs
         self._nb_us = nb_us
@@ -111,14 +112,15 @@ class MushroomBody(Component):
         self._nb_apl = nb_apl
         self._nb_mbon = nb_mbon
 
-        self.f_cs = lambda x: x
-        self.f_us = lambda x: x
-        self.f_dan = lambda x: relu(x, cmax=2)
-        self.f_kc = lambda x: relu(x, cmax=2)
-        self.f_apl = lambda x: relu(x, cmax=2)
-        self.f_mbon = lambda x: relu(x, cmax=2)
+        self.f_cs = lambda x: linear(x, noise=self._noise, rng=self.rng)
+        self.f_us = lambda x: linear(x, noise=self._noise, rng=self.rng)
+        self.f_dan = lambda x: relu(x, cmax=2, noise=self._noise, rng=self.rng)
+        self.f_kc = lambda x: relu(x, cmax=2, noise=self._noise, rng=self.rng)
+        self.f_apl = lambda x: relu(x, cmax=2, noise=self._noise, rng=self.rng)
+        self.f_mbon = lambda x: relu(x, cmax=2, noise=self._noise, rng=self.rng)
 
         self._sparseness = sparseness
+        self._maximum_weight = 50
 
         self.cs_names = ["c_{%d}" % i for i in range(nb_cs)]
         self.us_names = ["u_{%d}" % i for i in range(nb_us)]
@@ -159,12 +161,12 @@ class MushroomBody(Component):
         self.w_rest = uniform_synapses(self.nb_kc, self.nb_mbon, fill_value=1, dtype=self.dtype)
 
         # reset responses
-        self._cs = np.zeros((self._repeats, self.nb_cs), dtype=self.dtype)
-        self._us = np.zeros((self._repeats, self.nb_us), dtype=self.dtype)
-        self._dan = np.zeros((self._repeats, self.nb_dan), dtype=self.dtype)
-        self._kc = np.zeros((self._repeats, self.nb_kc), dtype=self.dtype)
-        self._apl = np.zeros((self._repeats, self.nb_apl), dtype=self.dtype)
-        self._mbon = np.zeros((self._repeats, self.nb_mbon), dtype=self.dtype)
+        self._cs = np.zeros((self._repeats, self.neuron_dims, self.nb_cs), dtype=self.dtype)
+        self._us = np.zeros((self._repeats, self.neuron_dims, self.nb_us), dtype=self.dtype)
+        self._dan = np.zeros((self._repeats, self.neuron_dims, self.nb_dan), dtype=self.dtype)
+        self._kc = np.zeros((self._repeats, self.neuron_dims, self.nb_kc), dtype=self.dtype)
+        self._apl = np.zeros((self._repeats, self.neuron_dims, self.nb_apl), dtype=self.dtype)
+        self._mbon = np.zeros((self._repeats, self.neuron_dims, self.nb_mbon), dtype=self.dtype)
 
         self.update = True
 
@@ -189,35 +191,46 @@ class MushroomBody(Component):
             if all_repeats:
                 return self.r_cs[..., self.cs_names.index(neuron_name)]
             else:
-                return self.r_cs[0, self.cs_names.index(neuron_name)]
+                return self.r_cs[0, ..., self.cs_names.index(neuron_name)]
 
         elif neuron_name in self.us_names:
             if all_repeats:
                 return self.r_us[..., self.us_names.index(neuron_name)]
             else:
-                return self.r_us[0, self.us_names.index(neuron_name)]
+                return self.r_us[0, ..., self.us_names.index(neuron_name)]
         elif neuron_name in self.dan_names:
             if all_repeats:
                 return self.r_dan[..., self.dan_names.index(neuron_name)]
             else:
-                return self.r_dan[0, self.dan_names.index(neuron_name)]
+                return self.r_dan[0, ..., self.dan_names.index(neuron_name)]
         elif neuron_name in self.kc_names:
             if all_repeats:
                 return self.r_kc[..., self.kc_names.index(neuron_name)]
             else:
-                return self.r_kc[0, self.kc_names.index(neuron_name)]
+                return self.r_kc[0, ..., self.kc_names.index(neuron_name)]
         elif neuron_name in self.apl_names:
             if all_repeats:
                 return self.r_apl[..., self.apl_names.index(neuron_name)]
             else:
-                return self.r_apl[0, self.apl_names.index(neuron_name)]
+                return self.r_apl[0, ..., self.apl_names.index(neuron_name)]
         elif neuron_name in self.mbon_names:
             if all_repeats:
                 return self.r_mbon[..., self.mbon_names.index(neuron_name)]
             else:
-                return self.r_mbon[0, self.mbon_names.index(neuron_name)]
+                return self.r_mbon[0, ..., self.mbon_names.index(neuron_name)]
         else:
             return None
+
+    def set_maximum_weight(self, new_max):
+        """
+        Sets the maximum value for the KC-MBON synaptic weights.
+
+        Parameters
+        ----------
+        new_max: float
+            the new maximum weight
+        """
+        self._maximum_weight = new_max
 
     def _fprop(self, cs=None, us=None):
         """
@@ -237,20 +250,33 @@ class MushroomBody(Component):
             the MBONs' responses
 
         """
-        if cs is None:
-            cs = np.zeros_like(self._cs[0])
-        if us is None:
-            us = np.zeros_like(self._us[0])
-        cs = np.array(cs, dtype=self.dtype)
-        us = np.array(us, dtype=self.dtype)
+        _cs = copy(cs)
+        _us = copy(us)
 
-        if len(us) < self.nb_us:
-            _us = us
-            us = np.zeros(self.nb_us)
-            us[:len(_us)] = _us
-        elif us.shape[0] > self.nb_us:
-            us = us[:self.nb_us]
-        us = np.asarray(us, dtype=self.dtype)
+        cs = np.zeros_like(self._cs[0])
+        if _cs is not None:
+            if _cs.ndim == 1:
+                cs[..., :] = _cs
+            elif _cs.ndim == 2:
+                cs[..., :, :] = _cs
+            elif _cs.ndim == 3:
+                cs[..., :, :, :] = _cs
+            else:
+                cs[:] = _cs
+        us = np.zeros_like(self._us[0])
+        if _us is not None:
+            if _us.shape[-1] < us.shape[-1]:
+                __us = np.zeros(_us.shape[:-1] + (us.shape[-1],), dtype=self.dtype)
+                __us[..., :_us.shape[-1]] = _us
+                _us = __us
+            if _us.ndim == 1:
+                us[..., :] = _us
+            elif _us.ndim == 2:
+                us[..., :, :] = _us
+            elif _us.ndim == 3:
+                us[..., :, :, :] = _us
+            else:
+                us[:] = _us
 
         for r in range(self.repeats):
 
@@ -300,6 +326,7 @@ class MushroomBody(Component):
         _kc += a_cs @ self.w_c2k + apl_pre @ self.w_a2k + self.b_k
         a_kc = self.f_kc(self.update_values(_kc, v_pre=kc_pre, eta=None if v_update else (1. - self._lambda)))
 
+        us = np.array(us, dtype=self.dtype)
         a_us = self.f_us(us)
 
         _dan = a_us @ self.w_u2d + mbon_pre @ self.w_m2d + self.b_d
@@ -308,7 +335,7 @@ class MushroomBody(Component):
         _apl = kc_pre @ self.w_k2a + self.b_a
         a_apl = self.f_apl(self.update_values(_apl, v_pre=apl_pre, eta=None if v_update else (1. - self._lambda)))
 
-        _mbon = kc_pre @ self.w_k2m + mbon_pre @ self.w_m2m + self.b_m
+        _mbon = kc_pre @ self.w_k2m / float(self.sparseness * self.nb_kc) + mbon_pre @ self.w_m2m + self.b_m
         a_mbon = self.f_mbon(self.update_values(_mbon, v_pre=mbon_pre, eta=None if v_update else (1. - self._lambda)))
 
         if self.update:
@@ -316,7 +343,8 @@ class MushroomBody(Component):
                 D = np.maximum(a_dan, 0) @ self.w_d2m
             else:
                 D = a_dan
-            self.w_k2m = np.clip(self.update_weights(self.w_k2m, a_kc, a_mbon, D, w_rest=self.w_rest), 0, 50)
+            self.w_k2m = np.clip(self.update_weights(self.w_k2m, a_kc, a_mbon, D, w_rest=self.w_rest),
+                                 0, self._maximum_weight)
 
         return a_kc, a_apl, a_dan, a_mbon
 
@@ -598,16 +626,19 @@ class WillshawNetwork(MushroomBody):
             nb_cs=nb_cs, nb_us=nb_us, nb_kc=nb_kc, nb_apl=nb_apl, nb_dan=nb_dan, nb_mbon=nb_mbon,
             learning_rule=learning_rule, eligibility_trace=eligibility_trace, *args, **kwargs)
 
-        self.f_cs = lambda x: np.asarray(x > np.sort(x)[int(self.nb_cs * .7)], dtype=self.dtype)
+        self.f_cs = lambda x: np.asarray(
+            np.greater(x.T, np.sort(x)[..., int(self.nb_cs * .7)]).T, dtype=self.dtype)
+        self.f_kc = lambda x: np.asarray(winner_takes_all(x, percentage=self.sparseness), dtype=self.dtype)
         self.f_dan = lambda x: relu(x, cmax=2)
         # self.f_kc = lambda x: np.asarray(x > 0, dtype=self.dtype)
         # self.f_kc = lambda x: np.asarray(
         #     x >= np.sort(x)[::-1][int(self.sparseness * self.nb_kc)], dtype=self.dtype)
-        self.f_kc = lambda x: np.asarray(winner_takes_all(x, percentage=self.sparseness), dtype=self.dtype)
-        self.f_mbon = lambda x: relu(x)
+        self.f_mbon = lambda x: relu(70. * x / (self.sparseness * self.nb_kc), noise=self._noise, rng=self.rng)
 
     def reset(self):
         super().reset()
+        if self.nb_us > 1 and self.nb_dan > 1:
+            self.w_u2d = opposing_synapses(self.nb_us, self.nb_dan, fill_value=2, dtype=self.dtype)
         self.w_rest *= 0
 
     def __repr__(self):
@@ -659,13 +690,17 @@ class PerfectMemory(MushroomBody):
 
         if len(self._database) > 0:
             y_true = self.database.T
-            y_pred = np.array([self._cs[0]] * len(self._database)).T
-            self._mbon[0] = self._error_metric(y_true, y_pred, multioutput='raw_values', squared=False).min()
+            mbon = []
+            for cs in self._cs[0]:
+                y_pred = np.array([cs] * len(self._database)).T
+                dist = self._error_metric(y_true, y_pred, multioutput='raw_values', squared=False).min()
+                mbon.append(dist)
+            self._mbon[0, :, 0] = mbon
         else:
             self._mbon[0] = 1.
 
         if self.update:
-            self._database.append(self._cs[0].copy())
+            self._database.append(self._cs[0, 0].copy())
 
         return self._mbon[0]
 
@@ -717,12 +752,18 @@ class IncentiveCircuit(MushroomBody):
         self._us_magnitude = us_magnitude
         self._memory_charging_speed = ltm_charging_speed
 
-        self._pds, self._pde = 0, 2  # d-DANs
-        self._pcs, self._pce = 2, 4  # c-DANs
-        self._pfs, self._pfe = 4, 6  # m-DANs
-        self._pss, self._pse = 0, 2  # s-MBONs
-        self._prs, self._pre = 2, 4  # r-MBONs
-        self._pms, self._pme = 4, 6  # m-MBONs
+        if not hasattr(self, "_pds") or not hasattr(self, "_pde"):
+            self._pds, self._pde = 0, 2  # d-DANs
+        if not hasattr(self, "_pcs") or not hasattr(self, "_pce"):
+            self._pcs, self._pce = 2, 4  # c-DANs
+        if not hasattr(self, "_pfs") or not hasattr(self, "_pfe"):
+            self._pfs, self._pfe = 4, 6  # m-DANs
+        if not hasattr(self, "_pss") or not hasattr(self, "_pse"):
+            self._pss, self._pse = 0, 2  # s-MBONs
+        if not hasattr(self, "_prs") or not hasattr(self, "_pre"):
+            self._prs, self._pre = 2, 4  # r-MBONs
+        if not hasattr(self, "_pms") or not hasattr(self, "_pme"):
+            self._pms, self._pme = 4, 6  # m-MBONs
 
         super().__init__(nb_cs=nb_cs, nb_us=nb_us, nb_kc=nb_kc, nb_apl=nb_apl, nb_dan=nb_dan, nb_mbon=nb_mbon,
                          learning_rule=learning_rule, *args, **kwargs)
@@ -753,50 +794,52 @@ class IncentiveCircuit(MushroomBody):
         self.b_m[prs:pre] = -2.
         self.b_m[pms:pme] = -2.
 
-        self._dan[0] = self.b_d.copy()
-        self._mbon[0] = self.b_m.copy()
+        self._dan[0, :, ...] = self.b_d.copy()
+        self._mbon[0, :, ...] = self.b_m.copy()
 
         # susceptible memory (SM) sub-circuit
         if has_sm:
             # Susceptible memories depress their opposite DANs
-            self.w_m2d[pss:pse, pds:pde] = opposing_synapses(pse-pss, pde-pds, fill_value=-.3, dtype=self.dtype)
+            self.w_m2d[pss:pse, pds:pde] += opposing_synapses(pse-pss, pde-pds, fill_value=-1, dtype=self.dtype)
             # Discharging DANs depress their opposite susceptible MBONs
-            self.w_d2m[pds:pde, pss:pse] = opposing_synapses(pde-pds, pse-pss, fill_value=-1, dtype=self.dtype)
+            self.w_d2m[pds:pde, pss:pse] += opposing_synapses(pde-pds, pse-pss, fill_value=-1, dtype=self.dtype)
+            # Susceptible MBONs depress the other susceptible MBONs
+            # self.w_m2m[pss:pse, pss:pse] = opposing_synapses(pse-pss, pse-pss, fill_value=-1, dtype=self.dtype)
 
         # restrained memory (RM) sub-circuit
         if has_rm:
             # Susceptible memories depress their opposite restrained MBONs
-            self.w_m2m[pss:pse, prs:pre] = opposing_synapses(pse-pss, pre-prs, fill_value=-1, dtype=self.dtype)
+            self.w_m2m[pss:pse, prs:pre] += opposing_synapses(pse-pss, pre-prs, fill_value=-1, dtype=self.dtype)
 
         if has_ltm:
             # Long-term memory (LTM) sub-circuit
-            self.w_m2d[pms:pme, pcs:pce] = opposing_synapses(pme-pms, pce-pcs, fill_value=self.memory_charging_speed,
+            self.w_m2d[pms:pme, pcs:pce] += opposing_synapses(pme-pms, pce-pcs, fill_value=self.memory_charging_speed,
                                                              dtype=self.dtype)
-            self.w_m2d[pms:pme, pcs:pce] = roll_synapses(self.w_m2d[pms:pme, pcs:pce], left=1)
+            self.w_m2d[pms:pme, pcs:pce] += roll_synapses(self.w_m2d[pms:pme, pcs:pce], left=1)
             # Charging DANs enhance their respective memory MBONs
-            self.w_d2m[pcs:pce, pms:pme] = opposing_synapses(pce-pcs, pme-pms, fill_value=self.memory_charging_speed,
+            self.w_d2m[pcs:pce, pms:pme] += opposing_synapses(pce-pcs, pme-pms, fill_value=self.memory_charging_speed,
                                                              dtype=self.dtype)
-            self.w_d2m[pcs:pce, pms:pme] = roll_synapses(self.w_d2m[pcs:pce, pms:pme], right=1)
+            self.w_d2m[pcs:pce, pms:pme] += roll_synapses(self.w_d2m[pcs:pce, pms:pme], right=1)
 
         # reciprocal restrained memories (RRM) sub-circuit
         if has_rrm:
             # Restrained memories enhance their respective DANs
-            self.w_m2d[prs:pre, pcs:pce] = diagonal_synapses(pre-prs, pce-pcs, fill_value=.5, dtype=self.dtype)
+            self.w_m2d[prs:pre, pcs:pce] += diagonal_synapses(pre-prs, pce-pcs, fill_value=1., dtype=self.dtype)
 
             # Charging DANs depress their opposite restrained MBONs
-            self.w_d2m[pcs:pce, prs:pre] = opposing_synapses(pce-pcs, pre-prs, fill_value=-1, dtype=self.dtype)
+            self.w_d2m[pcs:pce, prs:pre] += opposing_synapses(pce-pcs, pre-prs, fill_value=-1, dtype=self.dtype)
 
         # reciprocal forgetting memories (RFM) sub-circuit
         if has_rfm:
             # Relative states enhance their respective DANs
-            self.w_m2d[pms:pme, pfs:pfe] = diagonal_synapses(pme-pms, pfe-pfs, fill_value=.5, dtype=self.dtype)
+            self.w_m2d[pms:pme, pfs:pfe] += diagonal_synapses(pme-pms, pfe-pfs, fill_value=1., dtype=self.dtype)
 
             # Forgetting DANs depress their opposite long-term memory MBONs
-            self.w_d2m[pfs:pfe, pms:pme] = opposing_synapses(pfe-pfs, pme-pms, fill_value=-1, dtype=self.dtype)
+            self.w_d2m[pfs:pfe, pms:pme] += opposing_synapses(pfe-pfs, pme-pms, fill_value=-1, dtype=self.dtype)
 
         # Memory assimilation mechanism (MAM)
         if has_mam:
-            self.w_d2m[pfs:pfe, prs:pre] = diagonal_synapses(pfe-pfs, pre-prs, fill_value=-self.memory_charging_speed,
+            self.w_d2m[pfs:pfe, prs:pre] += diagonal_synapses(pfe-pfs, pre-prs, fill_value=-self.memory_charging_speed,
                                                              dtype=self.dtype)
 
         self.w_c2k *= self._cs_magnitude
@@ -822,7 +865,7 @@ class IncentiveCircuit(MushroomBody):
 
 
 class IncentiveWheel(IncentiveCircuit):
-    def __init__(self, nb_cs=8, nb_us=8, nb_kc=40, nb_apl=0, nb_dan=16, nb_mbon=16, learning_rule=dopaminergic,
+    def __init__(self, nb_cs=8, nb_us=8, nb_kc=None, nb_dan=None, nb_mbon=None, nb_apl=0, learning_rule=dopaminergic,
                  *args, **kwargs):
         """
         The Incentive Wheel is an extension of the Incentive Circuit and more complete model of the Mushroom Body that
@@ -833,23 +876,38 @@ class IncentiveWheel(IncentiveCircuit):
 
         Parameters
         ----------
-        nb_cs
-        nb_us
-        nb_kc
-        nb_apl
-        nb_dan
-        nb_mbon
+        nb_cs: int, optional
+        nb_us: int, optional
+        nb_kc: int, optional
+        nb_apl: int, optional
+        nb_dan: int, optional
+        nb_mbon: int, optional
         learning_rule
-        args
-        kwargs
         """
 
-        self._pds, self._pde = 0, 8  # d-DANs
-        self._pcs, self._pce = 8, 16  # c-DANs
-        self._pfs, self._pfe = 8, 16  # m-DANs
-        self._pss, self._pse = 0, 8  # s-MBONs
-        self._prs, self._pre = 8, 16  # r-MBONs
-        self._pms, self._pme = 8, 16  # m-MBONs
+        if nb_cs is None:
+            nb_cs = 8
+        if nb_us is None and nb_dan is not None:
+            nb_us = nb_dan // 2
+            nb_dan = 2 * nb_us
+        elif nb_us is None and nb_mbon is not None:
+            nb_us = nb_mbon // 2
+            nb_mbon = 2 * nb_us
+        elif nb_us is None:
+            nb_us = 8
+        if nb_kc is None:
+            nb_kc = 5 * nb_cs
+        if nb_dan is None:
+            nb_dan = 2 * nb_us
+        if nb_mbon is None:
+            nb_mbon = nb_dan
+
+        self._pds, self._pde = 0, nb_dan // 2  # d-DANs
+        self._pcs, self._pce = nb_dan // 2, nb_dan  # c-DANs
+        self._pfs, self._pfe = nb_dan // 2, nb_dan  # m-DANs
+        self._pss, self._pse = 0, nb_mbon // 2  # s-MBONs
+        self._prs, self._pre = nb_mbon // 2, nb_mbon  # r-MBONs
+        self._pms, self._pme = nb_mbon // 2, nb_mbon  # m-MBONs
 
         super(IncentiveWheel, self).__init__(nb_cs=nb_cs, nb_us=nb_us, nb_kc=nb_kc, nb_apl=nb_apl, nb_dan=nb_dan,
                                              nb_mbon=nb_mbon, learning_rule=learning_rule, *args, **kwargs)
@@ -859,8 +917,117 @@ class IncentiveWheel(IncentiveCircuit):
         self.mbon_names = ["s_%d" % i for i in range(self.nb_mbon//2)] + ["m_%d" % i for i in range(self.nb_mbon//2)]
         self.dan_names = ["d_%d" % i for i in range(self.nb_dan//2)] + ["f_%d" % i for i in range(self.nb_dan//2)]
 
+    def reset(self, **kwargs):
+        kwargs.setdefault("has_rfm", False)
+        super().reset(**kwargs)
+
     def __repr__(self):
         return super().__repr__().replace("IncentiveCircuit", "IncentiveWheel")
+
+
+class CrossIncentive(IncentiveCircuit):
+    def __init__(self, nb_cs=10, nb_us=4, nb_kc=None, nb_dan=None, nb_mbon=None, nb_apl=0, learning_rule=dopaminergic,
+                 *args, **kwargs):
+        """
+        The Incentive Wheel is an extension of the Incentive Circuit and more complete model of the Mushroom Body that
+        encodes the memory dynamics of model related with the susceptible, restrained and lont-term memory MBONs. It
+        contains MBON-DAN and MBON-MBON feedback connections similarly to the Incentive Circuit, but it also connects
+        different incentive circuits that share MBONs with different roles. This model was first presented in
+        Gkanias et al (2021).
+
+        Parameters
+        ----------
+        nb_cs: int, optional
+        nb_us: int, optional
+        nb_kc: int, optional
+        nb_apl: int, optional
+        nb_dan: int, optional
+        nb_mbon: int, optional
+        learning_rule
+        """
+
+        if nb_cs is None:
+            nb_cs = 8
+        if nb_us is None and nb_dan is not None:
+            nb_us = nb_dan // 2
+            nb_dan = 2 * nb_us
+        elif nb_us is None and nb_mbon is not None:
+            nb_us = nb_mbon // 2
+            nb_mbon = 2 * nb_us
+        elif nb_us is None:
+            nb_us = 8
+        if nb_kc is None:
+            nb_kc = 5 * nb_cs
+        if nb_dan is None:
+            nb_dan = 2 * nb_us
+        if nb_mbon is None:
+            nb_mbon = nb_dan
+
+        self._pds, self._pde = 0, nb_dan // 2  # d-DANs
+        self._pcs, self._pce = nb_dan // 2, nb_dan  # c-DANs
+        self._pfs, self._pfe = nb_dan // 2, nb_dan  # m-DANs
+        self._pss, self._pse = 0, nb_mbon // 2  # s-MBONs
+        self._prs, self._pre = nb_mbon // 2, nb_mbon  # r-MBONs
+        self._pms, self._pme = nb_mbon // 2, nb_mbon  # m-MBONs
+
+        super(CrossIncentive, self).__init__(nb_cs=nb_cs, nb_us=nb_us, nb_kc=nb_kc, nb_apl=nb_apl, nb_dan=nb_dan,
+                                             nb_mbon=nb_mbon, learning_rule=learning_rule, *args, **kwargs)
+
+        self.us_names = ["left turn", "right turn", "not left turn", "not right turn"]
+        self.mbon_names = ["s_{L}", "s_{R}", "s_{nL}", "s_{nR}", "m_{L}", "m_{R}", "m_{nL}", "m_{nR}"]
+        self.dan_names = ["d_{L}", "d_{R}", "d_{nL}", "d_{nR}", "c_{L}", "c_{R}", "c_{nL}", "c_{nR}"]
+
+    def reset(self, **kwargs):
+        kwargs.setdefault("has_ltm", False)
+        kwargs.setdefault("has_rfm", False)
+        kwargs.setdefault("has_mam", False)
+        super().reset(**kwargs)
+
+        pds, pde = self._pds, self._pde
+        pcs, pce = self._pcs, self._pce
+        pfs, pfe = self._pfs, self._pfe
+        pss, pse = self._pss, self._pse
+        prs, pre = self._prs, self._pre
+        pms, pme = self._pms, self._pme
+
+        self.b_d[pds:pde] = 0.
+        self.b_d[pcs:pce] = 0.
+        self.b_d[pfs:pfe] = 0.
+        self.b_m[pss:pse] = 0.
+        self.b_m[prs:pre] = 0.
+        self.b_m[pms:pme] = 0.
+
+        self._dan[0, :, ...] = self.b_d.copy()
+        self._mbon[0, :, ...] = self.b_m.copy()
+
+        # susceptible memory (SM) sub-circuit
+        # Susceptible MBONs depress the other susceptible MBONs
+        self.w_m2m[pss:pse, pss:pse] = np.array([
+            [0., 1., 1., 0.],
+            [1., 0., 0., 1.],
+            [1., 0., 0., 1.],
+            [0., 1., 1., 0.]
+        ]) * (-.5)
+
+        # Long-term memory (LTM) sub-circuit
+        # Charging DANs enhance their respective memory MBONs
+        self.w_d2m[pcs:pce, pms:pme] += np.array([
+            [0., 0., 0., 1.],
+            [0., 0., 1., 0.],
+            [0., 1., 0., 0.],
+            [1., 0., 0., 0.]
+        ]) * self.memory_charging_speed
+
+        # Memory assimilation mechanism (MAM)
+        self.w_d2m[pfs:pfe, prs:pre] += np.array([
+            [0., 1., 0., 0.],
+            [1., 0., 0., 0.],
+            [0., 0., 0., 1.],
+            [0., 0., 1., 0.]
+        ]) * (-self.memory_charging_speed)
+
+    def __repr__(self):
+        return super().__repr__().replace("IncentiveCircuit", "CrossIncentive")
 
 
 class SusceptibleMemory(IncentiveCircuit):
