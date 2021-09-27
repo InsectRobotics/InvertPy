@@ -5,8 +5,9 @@ mushroom bodies (MB) and central complex (CX). A variety of customised functions
 change their characteristics and create your own brain models.
 """
 
-from .mushroombody import MushroomBody, WillshawNetwork
-from .centralcomplex import BeeCentralComplex
+from .mushroombody import MushroomBody
+from .memory import WillshawNetwork, PerfectMemory
+from .centralcomplex import CentralComplex
 from .compass import CelestialCompass, PolarisationCompass, SolarCompass
 from .preprocessing import Preprocessing, Whitening, DiscreteCosineTransform
 from .component import Component
