@@ -50,15 +50,34 @@ In order to install the package and reproduce the results of the manuscript you 
 the code, navigate to the main directory of the project, install the dependencies and finally
 the package itself. Here is an example code that installs the package:
 
+1. Clone this repo.
 ```commandline
 mkdir ~/src
 cd ~/src
 git clone https://github.com/InsectRobotics/InvertPy.git
 cd InvertPy
-pip install -r requirements.txt
-pip install .
 ```
-Note that the [pip](https://pypi.org/project/pip/) project is needed for the above installation.
+2. Install the required libraries. 
+   1. using pip :
+      ```commandline
+      pip install -r requirements.txt
+      ```
+
+   2. using conda :
+      ```commandline
+      conda env create -f environment.yml
+      ```
+3. Install the package.
+   1. using pip :
+      ```commandline
+      pip install .
+      ```
+   2. using conda :
+      ```commandline
+      conda install .
+      ```
+   
+Note that the [pip](https://pypi.org/project/pip/) project might be needed for the above installation.
 
 ## Report an issue
 

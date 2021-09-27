@@ -119,6 +119,15 @@ class CentralComplex(Component):
         self._w_pontin2cpu1b = uniform_synapses(self.nb_cpu1, self.nb_cpu1b, fill_value=0, dtype=self.dtype)
         self._w_cpu42pontin = uniform_synapses(self.nb_cpu4, self.nb_cpu4, fill_value=0, dtype=self.dtype)
 
+        # The cell properties (for sigmoid function)
+        self._tl2_slope = 6.8
+        self._cl1_slope = 3.0
+        self._tb1_slope = 5.0
+        self._cpu4_slope = 5.0
+        self._cpu1_slope = 5.0  # 7.5
+        self._motor_slope = 1.0
+        self._pontin_slope = 5.0
+
         self._b_tl2 = 3.0
         self._b_cl1 = -0.5
         self._b_tb1 = 0.0
@@ -152,15 +161,6 @@ class CentralComplex(Component):
 
         self.tl2_prefs = np.tile(np.linspace(0, 2 * np.pi, self.nb_tb1, endpoint=False), 2)
         # self.tl2_prefs = np.tile(np.linspace(-np.pi, np.pi, self.nb_tb1, endpoint=False), 2)
-
-        # The cell properties (for sigmoid function)
-        self._tl2_slope = 6.8
-        self._cl1_slope = 3.0
-        self._tb1_slope = 5.0
-        self._cpu4_slope = 5.0
-        self._cpu1_slope = 5.0  # 7.5
-        self._motor_slope = 1.0
-        self._pontin_slope = 5.0
 
         self.f_tl2 = lambda v: sigmoid(v * self._tl2_slope - self.b_tl2, noise=self._noise, rng=self.rng)
         self.f_cl1 = lambda v: sigmoid(v * self._cl1_slope - self.b_cl1, noise=self._noise, rng=self.rng)
@@ -230,8 +230,6 @@ class CentralComplex(Component):
                 self._tb1 = a_tb1 = self.f_tb1(p * a_cl1 @ self.w_cl12tb1 + (1 - p) * self._tb1 @ self.w_tb12tb1)
         self._tn1 = a_tn1 = self.flow2tn1(flow)
         self._tn2 = a_tn2 = self.flow2tn2(flow)
-
-        # print(self._tb1)
 
         if self.pontin:
             mem = .5 * self._gain * (np.clip(a_tn2 @ self.w_tn22cpu4 - a_tb1 @ self.w_tb12cpu4, 0, 1) - .25)

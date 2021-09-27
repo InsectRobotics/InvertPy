@@ -182,4 +182,4 @@ def whitening(x, w=None, m=None, func=pca, epsilon=10e-5, reshape='first'):
     if m is None:
         m = np.mean(x, axis=0) if np.shape(x)[0] > 1 else np.zeros((1, np.shape(w)[0]))
 
-    return np.reshape((x - m) @ w, shape)
+    return np.reshape(np.dot((x - m), w), shape)
