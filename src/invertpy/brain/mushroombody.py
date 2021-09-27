@@ -4,8 +4,6 @@ Package that holds implementations of the Mushroom Body component of the insect 
 References:
     .. [1] Wessnitzer, J., Young, J. M., Armstrong, J. D. & Webb, B. A model of non-elemental olfactory learning in
        Drosophila. J Comput Neurosci 32, 197–212 (2012).
-    .. [2] Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to Encode
-       Route Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
 """
 
 __author__ = "Evripidis Gkanias"
@@ -19,17 +17,14 @@ __maintainer__ = "Evripidis Gkanias"
 
 from ._helpers import eps
 from .component import Component
-from .plasticity import dopaminergic, anti_hebbian
 from .synapses import uniform_synapses, diagonal_synapses, sparse_synapses, opposing_synapses, roll_synapses
-from .activation import relu, winner_takes_all
-
-from sklearn.metrics import mean_squared_error
+from .activation import relu
 
 import numpy as np
 
 
 class MushroomBody(Component):
-    def __init__(self, nb_cs, nb_us, nb_kc, nb_dan, nb_mbon, nb_apl=1, learning_rule=dopaminergic, sparseness=0.03,
+    def __init__(self, nb_cs, nb_us, nb_kc, nb_dan, nb_mbon, nb_apl=1, learning_rule='dopaminergic', sparseness=0.03,
                  *args, **kwargs):
         """
         The Mushroom Body component of the insect brain is responsible for creating associations between the input (CS)
@@ -40,7 +35,7 @@ class MushroomBody(Component):
 
         Examples
         --------
-        >>> mb = MushroomBody(nb_cs=2, nb_us=2, nb_kc=10, nb_dan=3, nb_mbon=3, nb_apl=1, learning_rule=dopaminergic, sparseness=0.03)
+        >>> mb = MushroomBody(nb_cs=2, nb_us=2, nb_kc=10, nb_dan=3, nb_mbon=3, nb_apl=1, learning_rule='dopaminergic', sparseness=0.03)
         >>> print(mb.nb_cs, mb.nb_us, mb.nb_kc, mb.nb_dan, mb.nb_mbon, mb.nb_apl)
         2 2 10 3 3 1
         >>> print(mb.learning_rule)
@@ -572,117 +567,8 @@ class MushroomBody(Component):
         return self._sparseness
 
 
-class WillshawNetwork(MushroomBody):
-
-    def __init__(self, nb_cs=360, nb_us=1, nb_kc=200000, nb_apl=0, nb_dan=1, nb_mbon=1, learning_rule=anti_hebbian,
-                 eligibility_trace=.1, *args, **kwargs):
-        """
-        The Whillshaw Network is a simplified Mushroom Body component and it does not contain MBON-to-DAN connections.
-        This model is a modified version of the one presented in [1]_.
-
-        Examples
-        --------
-        >>> wn = WillshawNetwork(nb_cs=360, nb_kc=1000)
-        >>> wn.nb_cs
-        360
-        >>> wn.nb_kc
-        1000
-
-        Notes
-        -----
-        .. [1] Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to
-           Encode Route Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
-        """
-
-        super(WillshawNetwork, self).__init__(
-            nb_cs=nb_cs, nb_us=nb_us, nb_kc=nb_kc, nb_apl=nb_apl, nb_dan=nb_dan, nb_mbon=nb_mbon,
-            learning_rule=learning_rule, eligibility_trace=eligibility_trace, *args, **kwargs)
-
-        self.f_cs = lambda x: np.asarray(x > np.sort(x)[int(self.nb_cs * .7)], dtype=self.dtype)
-        self.f_dan = lambda x: relu(x, cmax=2)
-        # self.f_kc = lambda x: np.asarray(x > 0, dtype=self.dtype)
-        # self.f_kc = lambda x: np.asarray(
-        #     x >= np.sort(x)[::-1][int(self.sparseness * self.nb_kc)], dtype=self.dtype)
-        self.f_kc = lambda x: np.asarray(winner_takes_all(x, percentage=self.sparseness), dtype=self.dtype)
-        self.f_mbon = lambda x: relu(x)
-
-    def reset(self):
-        super().reset()
-        self.w_rest *= 0
-
-    def __repr__(self):
-        return "WillshawNetwork(PN=%d, KC=%d, EN=%d, eligibility_trace=%.2f, plasticity='%s')" % (
-            self.nb_cs, self.nb_kc, self.nb_mbon, self._lambda, self.learning_rule
-        )
-
-
-class PerfectMemory(MushroomBody):
-
-    def __init__(self, nb_cs=360, nb_mbon=1, error_metric=mean_squared_error, *args, **kwargs):
-        """
-        The Perfect Memory is a simplified Mushroom Body component and it does not contain any neural connections.
-        This model stores all the input received in a list and searches for the best match every time that receives a
-        new input are reports the minimum difference. This was used for comparison by many papers including [1]_.
-
-        Parameters
-        ----------
-        error_metric: callable
-            the metric that measures the error between the observation and the database.
-
-        Notes
-        -----
-        .. [1] Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to
-           Encode Route Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
-        """
-
-        kwargs.setdefault('nb_repeats', 1)
-        super().__init__(
-            nb_cs=nb_cs, nb_us=0, nb_kc=0, nb_apl=0, nb_dan=0, nb_mbon=nb_mbon, eligibility_trace=0., *args, **kwargs)
-
-        self.f_cs = lambda x: x
-
-        self._error_metric = error_metric
-        self._database = None
-        self.reset()
-
-    def reset(self):
-        super().reset()
-
-        # erase the database
-        self._database = []
-
-    def _fprop(self, cs=None, us=None):
-        if cs is None:
-            cs = np.zeros_like(self._cs[0])
-
-        self._cs[0] = self.f_cs(cs)
-
-        if len(self._database) > 0:
-            y_true = self.database.T
-            y_pred = np.array([self._cs[0]] * len(self._database)).T
-            self._mbon[0] = self._error_metric(y_true, y_pred, multioutput='raw_values', squared=False).min()
-        else:
-            self._mbon[0] = 1.
-
-        if self.update:
-            self._database.append(self._cs[0].copy())
-
-        return self._mbon[0]
-
-    def __repr__(self):
-        return "PerfectMemory(PN=%d, EN=%d, error=%s)" % (self.nb_cs, self.nb_mbon, self.error_metric)
-
-    @property
-    def database(self):
-        return np.array(self._database)
-
-    @property
-    def error_metric(self):
-        return self._error_metric.__name__
-
-
 class IncentiveCircuit(MushroomBody):
-    def __init__(self, nb_cs=2, nb_us=2, nb_kc=10, nb_apl=0, nb_dan=6, nb_mbon=6, learning_rule=dopaminergic,
+    def __init__(self, nb_cs=2, nb_us=2, nb_kc=10, nb_apl=0, nb_dan=6, nb_mbon=6, learning_rule='dopaminergic',
                  cs_magnitude=2., us_magnitude=2., ltm_charging_speed=.05, *args, **kwargs):
         """
         The Incentive Circuit is a representative compartment of the Mushroom Body that encodes the memory dynamics of
@@ -822,7 +708,7 @@ class IncentiveCircuit(MushroomBody):
 
 
 class IncentiveWheel(IncentiveCircuit):
-    def __init__(self, nb_cs=8, nb_us=8, nb_kc=40, nb_apl=0, nb_dan=16, nb_mbon=16, learning_rule=dopaminergic,
+    def __init__(self, nb_cs=8, nb_us=8, nb_kc=40, nb_apl=0, nb_dan=16, nb_mbon=16, learning_rule='dopaminergic',
                  *args, **kwargs):
         """
         The Incentive Wheel is an extension of the Incentive Circuit and more complete model of the Mushroom Body that

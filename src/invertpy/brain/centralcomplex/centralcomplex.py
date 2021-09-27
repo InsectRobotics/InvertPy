@@ -15,16 +15,16 @@ __license__ = "MIT"
 __version__ = "v1.0.0-alpha"
 __maintainer__ = "Evripidis Gkanias"
 
-from .component import Component
-from .synapses import *
-from .activation import sigmoid
-from .cx_helpers import tn_axes
+from invertpy.brain.component import Component
+from invertpy.brain.synapses import *
+from invertpy.brain.activation import sigmoid
+from ._helpers import tn_axes
 
 import numpy as np
 import os
 
 # get path of the script
-__root__ = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.."))
+__root__ = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../.."))
 
 N_COLUMNS = 8
 x = np.linspace(0, 2 * np.pi, N_COLUMNS, endpoint=False)
