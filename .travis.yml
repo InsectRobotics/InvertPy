@@ -14,6 +14,7 @@ script:
   - cd test
   - python component_doctest.py
   - python mushroombody_doctest.py
+  - python memory_doctest.py
   - python centralcomplex_doctest.py
   - python activation_doctest.py
   - python plasticity_doctest.py
