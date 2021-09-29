@@ -212,7 +212,7 @@ def anti_hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
         rein = rein[np.newaxis, ...]
     rein = np.maximum(rein, 0)
     r_pre = r_pre[..., np.newaxis]
-    d_w = learning_rate * (-rein * (r_pre * w) + w_rest)
+    d_w = learning_rate * (-rein * (r_pre * w))
     if d_w.ndim > 2:
         d_w = d_w.sum(axis=0)
     return w + d_w

@@ -53,9 +53,46 @@ class MemoryComponent(Component, ABC):
         )
 
     @property
+    def r_inp(self):
+        """
+        The responses of the input layer.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        raise NotImplementedError()
+
+    @property
+    def r_out(self):
+        """
+        The responses of the output layer.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        raise NotImplementedError()
+
+    @property
+    def r_hid(self):
+        """
+        The responses of the hidden layer.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        raise NotImplementedError()
+
+    @property
     def nb_input(self):
         """
         The number of units in the input layer.
+
+        Returns
+        -------
+        int
         """
         return self._nb_input
 
@@ -63,6 +100,10 @@ class MemoryComponent(Component, ABC):
     def nb_output(self):
         """
         The number of units in the output layer.
+
+        Returns
+        -------
+        int
         """
         return self._nb_output
 
@@ -193,7 +234,8 @@ class WillshawNetwork(MemoryComponent):
         a_out = self.f_output(self.update_values(out, v_pre=self.r_out, eta=1. - self._lambda))
 
         if self.update:
-            self.w_k2m = np.clip(self.update_weights(self.w_s2o, a_spr, a_out, reinforcement, w_rest=self._w_rest), 0, 1)
+            self.w_s2o = np.clip(
+                self.update_weights(self._w_s2o, a_spr, a_out, reinforcement, w_rest=self._w_rest), 0, 1)
 
         self._inp = a_inp
         self._spr = a_spr
@@ -223,21 +265,44 @@ class WillshawNetwork(MemoryComponent):
     @property
     def r_inp(self):
         """
-        The input responses.
+        The responses of the input layer.
+
+        Returns
+        -------
+        np.ndarray[float]
         """
         return self._inp
 
     @property
     def r_out(self):
         """
-        The output responses.
+        The responses of the output layer.
+
+        Returns
+        -------
+        np.ndarray[float]
         """
         return self._out
 
     @property
     def r_spr(self):
         """
-        The sparse responses.
+        The responses of the sparse layer.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._spr
+
+    @property
+    def r_hid(self):
+        """
+        The responses of the hidden layer is the same as the ones from the sparse layer.
+
+        Returns
+        -------
+        np.ndarray[float]
         """
         return self._spr
 
@@ -311,6 +376,10 @@ class PerfectMemory(MemoryComponent):
         self._max_capacity = maximum_capacity
         self._write = 0
 
+        self._inp = None
+        self._hid = None
+        self._out = None
+
         self.reset()
 
     def reset(self):
@@ -321,6 +390,9 @@ class PerfectMemory(MemoryComponent):
         # erase the database
         self._database = np.zeros((self._max_capacity, self.nb_input), dtype=self.dtype)
         self._write = 0
+        self._inp = np.zeros(self.nb_input, dtype=self.dtype)
+        self._hid = np.zeros(0, dtype=self.dtype)
+        self._out = np.zeros(self.nb_output, dtype=self.dtype)
 
         super().reset()
 
@@ -350,6 +422,9 @@ class PerfectMemory(MemoryComponent):
             a_out = self._error_metric(y_true, y_pred, multioutput='raw_values', squared=False).min()
         else:
             a_out = np.zeros(self.nb_output, dtype=self.dtype)
+
+        self._inp = a_inp
+        self._out = a_out
 
         if self.update:
             self._database[self._write % self._max_capacity] = a_inp
@@ -392,3 +467,36 @@ class PerfectMemory(MemoryComponent):
         float
         """
         return 1. - self._write / self._max_capacity
+
+    @property
+    def r_inp(self):
+        """
+        The responses of the input layer.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._inp
+
+    @property
+    def r_out(self):
+        """
+        The responses of the output layer.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._out
+
+    @property
+    def r_hid(self):
+        """
+        The responses of the hidden layer.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._hid
