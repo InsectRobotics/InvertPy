@@ -108,6 +108,17 @@ class MemoryComponent(Component, ABC):
         return self._nb_output
 
     @property
+    def nb_hidden(self):
+        """
+        The number of units in the hidden layer.
+
+        Returns
+        -------
+        int
+        """
+        raise NotImplementedError()
+
+    @property
     def free_space(self):
         """
         Percentile of the  available space in the memory.
@@ -259,6 +270,13 @@ class WillshawNetwork(MemoryComponent):
     def nb_sparse(self):
         """
         The number of units in the sparse layer.
+        """
+        return self._nb_sparse
+
+    @property
+    def nb_hidden(self):
+        """
+        The number of units in the hidden layer (same as sparse layer).
         """
         return self._nb_sparse
 
@@ -467,6 +485,13 @@ class PerfectMemory(MemoryComponent):
         float
         """
         return 1. - self._write / self._max_capacity
+
+    @property
+    def nb_hidden(self):
+        """
+        The number of units in the hidden layer.
+        """
+        return 0
 
     @property
     def r_inp(self):
