@@ -28,23 +28,40 @@ import numpy as np
 
 
 class MemoryComponent(Component, ABC):
-    """
-    Abstract class of a memory component in the insect brain. Memory components are use to store information related to
-    the visual navigation and other tasks. They have been used by numerous works usually as models of the mushroom
-    bodies [1]_, [2]_. Here we keep them more abstracted allowing them to be used as mushroom bodies or not.
+    def __init__(self, *args, nb_hidden=0, **kwargs):
+        """
+        Abstract class of a memory component in the insect brain. Memory components are use to store information related to
+        the visual navigation and other tasks. They have been used by numerous works usually as models of the mushroom
+        bodies [1]_, [2]_. Here we keep them more abstracted allowing them to be used as mushroom bodies or not.
 
-    Notes
-    -----
-    .. [1] Wessnitzer, J., Young, J. M., Armstrong, J. D. & Webb, B. A model of non-elemental olfactory learning in
-       Drosophila. J Comput Neurosci 32, 197–212 (2012).
-    .. [2] Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to Encode
-       Route Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
-    """
+        Parameters
+        ----------
+        nb_hidden : int
+            the number of the hidden units. Default is 0 (no hidden units)
+
+        Notes
+        -----
+        .. [1] Wessnitzer, J., Young, J. M., Armstrong, J. D. & Webb, B. A model of non-elemental olfactory learning in
+           Drosophila. J Comput Neurosci 32, 197–212 (2012).
+        .. [2] Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to Encode
+           Route Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
+        """
+        super().__init__(*args, **kwargs)
+
+        self._nb_hidden = nb_hidden
+
+        self._inp = np.zeros(self.nb_input, dtype=self.dtype)
+        self._out = np.zeros(self.nb_output, dtype=self.dtype)
+        self._hid = np.zeros(self.nb_hidden, dtype=self.dtype)
 
     def reset(self):
         """
         By default a memory component is open for updates.
         """
+        self._inp *= 0.
+        self._hid *= 0.
+        self._out *= 0.
+
         self.update = True
 
     def __repr__(self):
@@ -61,7 +78,7 @@ class MemoryComponent(Component, ABC):
         -------
         np.ndarray[float]
         """
-        raise NotImplementedError()
+        return self._inp
 
     @property
     def r_out(self):
@@ -72,7 +89,7 @@ class MemoryComponent(Component, ABC):
         -------
         np.ndarray[float]
         """
-        raise NotImplementedError()
+        return self._out
 
     @property
     def r_hid(self):
@@ -83,7 +100,7 @@ class MemoryComponent(Component, ABC):
         -------
         np.ndarray[float]
         """
-        raise NotImplementedError()
+        return self._hid
 
     @property
     def nb_input(self):
@@ -116,7 +133,7 @@ class MemoryComponent(Component, ABC):
         -------
         int
         """
-        raise NotImplementedError()
+        return self._nb_hidden
 
     @property
     def free_space(self):
@@ -176,6 +193,10 @@ class WillshawNetwork(MemoryComponent):
         .. [1] Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to
            Encode Route Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
         """
+        if nb_sparse is not None:
+            kwargs['nb_hidden'] = nb_sparse
+        else:
+            kwargs.setdefault('nb_hidden', nb_input * 40)
 
         super().__init__(nb_input=nb_input, nb_output=nb_output, learning_rule=learning_rule,
                          eligibility_trace=eligibility_trace, *args, **kwargs)
@@ -185,13 +206,6 @@ class WillshawNetwork(MemoryComponent):
         self._w_rest = 1.
 
         self.params.extend([self._w_i2s, self._w_s2o, self._w_rest, self._b_s, self._b_o])
-
-        # reserve space for the responses
-        self._inp = np.zeros(nb_input, dtype=self.dtype)
-        self._spr = np.zeros(nb_sparse, dtype=self.dtype)
-        self._out = np.zeros(nb_output, dtype=self.dtype)
-
-        self._nb_sparse = nb_input * 40 if nb_sparse is None else nb_sparse
 
         self.f_input = lambda x: np.asarray(x > np.sort(x)[int(self.nb_input * .7)], dtype=self.dtype)
         self.f_sparse = lambda x: np.asarray(winner_takes_all(x, percentage=self.sparseness), dtype=self.dtype)
@@ -206,10 +220,6 @@ class WillshawNetwork(MemoryComponent):
         self.w_i2s = sparse_synapses(self.nb_input, self.nb_sparse, dtype=self.dtype)
         self.w_i2s *= self.nb_input / self._w_i2s.sum(axis=1)[:, np.newaxis]
         self.w_s2o = uniform_synapses(self.nb_sparse, self.nb_output, fill_value=1, dtype=self.dtype)
-
-        self._inp *= 0.
-        self._spr *= 0.
-        self._out *= 0.
 
         super().reset()
 
@@ -249,7 +259,7 @@ class WillshawNetwork(MemoryComponent):
                 self.update_weights(self._w_s2o, a_spr, a_out, reinforcement, w_rest=self._w_rest), 0, 1)
 
         self._inp = a_inp
-        self._spr = a_spr
+        self._hid = a_spr
         self._out = a_out
 
         return a_out
@@ -271,36 +281,7 @@ class WillshawNetwork(MemoryComponent):
         """
         The number of units in the sparse layer.
         """
-        return self._nb_sparse
-
-    @property
-    def nb_hidden(self):
-        """
-        The number of units in the hidden layer (same as sparse layer).
-        """
-        return self._nb_sparse
-
-    @property
-    def r_inp(self):
-        """
-        The responses of the input layer.
-
-        Returns
-        -------
-        np.ndarray[float]
-        """
-        return self._inp
-
-    @property
-    def r_out(self):
-        """
-        The responses of the output layer.
-
-        Returns
-        -------
-        np.ndarray[float]
-        """
-        return self._out
+        return self._nb_hidden
 
     @property
     def r_spr(self):
@@ -311,18 +292,7 @@ class WillshawNetwork(MemoryComponent):
         -------
         np.ndarray[float]
         """
-        return self._spr
-
-    @property
-    def r_hid(self):
-        """
-        The responses of the hidden layer is the same as the ones from the sparse layer.
-
-        Returns
-        -------
-        np.ndarray[float]
-        """
-        return self._spr
+        return self._hid
 
     @property
     def w_i2s(self):
@@ -394,10 +364,6 @@ class PerfectMemory(MemoryComponent):
         self._max_capacity = maximum_capacity
         self._write = 0
 
-        self._inp = None
-        self._hid = None
-        self._out = None
-
         self.reset()
 
     def reset(self):
@@ -408,9 +374,6 @@ class PerfectMemory(MemoryComponent):
         # erase the database
         self._database = np.zeros((self._max_capacity, self.nb_input), dtype=self.dtype)
         self._write = 0
-        self._inp = np.zeros(self.nb_input, dtype=self.dtype)
-        self._hid = np.zeros(0, dtype=self.dtype)
-        self._out = np.zeros(self.nb_output, dtype=self.dtype)
 
         super().reset()
 
@@ -485,43 +448,3 @@ class PerfectMemory(MemoryComponent):
         float
         """
         return 1. - self._write / self._max_capacity
-
-    @property
-    def nb_hidden(self):
-        """
-        The number of units in the hidden layer.
-        """
-        return 0
-
-    @property
-    def r_inp(self):
-        """
-        The responses of the input layer.
-
-        Returns
-        -------
-        np.ndarray[float]
-        """
-        return self._inp
-
-    @property
-    def r_out(self):
-        """
-        The responses of the output layer.
-
-        Returns
-        -------
-        np.ndarray[float]
-        """
-        return self._out
-
-    @property
-    def r_hid(self):
-        """
-        The responses of the hidden layer.
-
-        Returns
-        -------
-        np.ndarray[float]
-        """
-        return self._hid

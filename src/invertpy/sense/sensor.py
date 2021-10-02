@@ -163,7 +163,7 @@ class Sensor(object):
         d_xyz: np.ndarray, list
             the 3D point that will be added to the position of the sensor.
         """
-        self._xyz += np.array(d_xyz)
+        self._xyz += np.array(d_xyz, dtype=self.dtype)
 
     @property
     def xyz(self):
@@ -185,7 +185,7 @@ class Sensor(object):
         --------
         Agent.position
         """
-        self.translate(np.array(v, dtype=self.dtype) - self._xyz)
+        self._xyz[:] = v
 
     @property
     def x(self):
@@ -226,7 +226,7 @@ class Sensor(object):
         --------
         Agent.orientation
         """
-        self.rotate(d_ori=self._ori.inv() * v)
+        self._ori = v
 
     @property
     def euler(self):
