@@ -17,8 +17,7 @@ from invertpy.sense import CompoundEye
 
 from .component import Component
 from .synapses import whitening_synapses, dct_synapses, mental_rotation_synapses
-from .activation import softmax
-from ._helpers import whitening, pca, eps
+from ._helpers import whitening, pca, zca, eps
 
 from abc import ABC
 from math import factorial
@@ -80,7 +79,7 @@ class Whitening(Preprocessing):
         """
         Whitening mean.
         """
-        self._f_white = lambda x: softmax((x - x.min()) / (x.max() - x.min() + eps), tau=.2, axis=0)
+        self._f_white = lambda x: ((x.T - x.min(axis=-1)) / (x.max(axis=-1) - x.min(axis=-1) + eps)).T
         """
         Activation function after whitening.
         """
@@ -113,7 +112,7 @@ class Whitening(Preprocessing):
             m = np.zeros(self._nb_input, dtype=self.dtype)
             self._is_calibrated = False
         else:
-            w, m = whitening_synapses(samples, w_func=self._w_method, dtype=self.dtype, bias=True)
+            w, m = whitening_synapses(samples, nb_out=self.nb_output, w_func=self._w_method, dtype=self.dtype, bias=True)
             self._is_calibrated = True
 
         if self._w_white is None or self._m_white is None:
@@ -135,7 +134,7 @@ class Whitening(Preprocessing):
         np.ndarray[float]
             the whitened signal
         """
-        return self._f_white(whitening(x, self._w_white, self._m_white))
+        return self._f_white(whitening(x, w=self._w_white, m=self._m_white))
 
     @property
     def calibrated(self):
@@ -284,10 +283,7 @@ class ZernikeMoments(Preprocessing):
             defines if the input and output angles will be in degrees or not. Default is False
         """
         kwargs.setdefault("nb_input", np.shape(ori)[0])
-        if order % 2:
-            nb_coeff = int(((1 + order) / 2) * ((3 + order) / 2))
-        else:
-            nb_coeff = int(np.square(order / 2. + 1))
+        nb_coeff = self.get_nb_coeff(order)
         kwargs.setdefault("nb_output", nb_coeff)
         super().__init__(*args, **kwargs)
 
@@ -339,7 +335,7 @@ class ZernikeMoments(Preprocessing):
 
         self.reset()
 
-    def reset(self):
+    def reset(self, *args):
         """
         Resets the ZM parameters.
         """
@@ -403,7 +399,7 @@ class ZernikeMoments(Preprocessing):
         Z = self.zernike_poly(self._rho, self._phi, order, repeat)
 
         # calculate the moments
-        z = x @ Z
+        z = np.dot(x, Z)
 
         # normalize the amplitude of moments
         z = (self._n + 1) * z / self.__cnt
@@ -544,6 +540,14 @@ class ZernikeMoments(Preprocessing):
             self._nb_input, self._nb_output, self._out_type, self.order, self.calibrated
         )
 
+    @staticmethod
+    def get_nb_coeff(order):
+        if order % 2:
+            nb_coeff = int(((1 + order) / 2) * ((3 + order) / 2))
+        else:
+            nb_coeff = int(np.square(order / 2. + 1))
+        return nb_coeff
+
 
 class MentalRotation(Preprocessing):
     def __init__(self, *args, nb_input=None, nb_output=8, eye=None, pref_angles=None, sigma=.02, **kwargs):
@@ -572,6 +576,8 @@ class MentalRotation(Preprocessing):
             "You should specify the input either by the 'nb_input' or the 'eye' attribute.")
         if eye is not None:
             nb_input = eye.nb_ommatidia
+        if pref_angles is not None:
+            nb_output = len(pref_angles)
         super().__init__(*args, nb_input=nb_input, nb_output=nb_output, **kwargs)
 
         self._w_rot = np.zeros((nb_input, nb_input, nb_output))
