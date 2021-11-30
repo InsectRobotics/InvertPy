@@ -19,6 +19,41 @@ from scipy.spatial.transform import Rotation as R
 import numpy as np
 
 
+def random_synapses(nb_in, nb_out, w_min=-1, w_max=1, dtype='float32', bias=None, rng=np.random.RandomState(2021)):
+    """
+    Creates random synapses.
+
+    Parameters
+    ----------
+    nb_in : int
+        the number of the input units.
+    nb_out: int
+        the number of the output units.
+    w_min : float, optional
+        the minimum synaptic weight
+    w_max : float, optional
+        the maximum synaptic weight
+    dtype : np.dtype | str
+        the type of the values for the synaptic weights.
+    bias : float | bool
+        the value of all the biases. If bool, the biases are also random. If None, no bias is returned.
+    rng : np.random.RandomState
+        the random number generator
+
+    Returns
+    -------
+    np.ndarray | tuple
+        the generated synaptic weights and the bias (if requested)
+    """
+    w = np.asarray(rng.uniform(low=w_min, high=w_max, size=(nb_in, nb_out)), dtype=dtype)
+    if bias is None:
+        return w
+    elif isinstance(bias, bool) and bias:
+        return w, np.asarray(rng.uniform(low=w_min, high=w_max, size=(nb_out,)), dtype=dtype)
+    else:
+        return w, np.full(nb_out, fill_value=bias, dtype=dtype)
+
+
 def uniform_synapses(nb_in, nb_out, fill_value=0, dtype='float32', bias=None):
     """
     Creates uniform synapses.
@@ -149,12 +184,19 @@ def sparse_synapses(nb_in, nb_out, nb_in_min=None, nb_in_max=None, normalise=Tru
 
     i = 0
     while c_out_in.sum() < nb_out_in.sum():
-        for j in range(nb_out):
+        ii = i
+        for j in range(nb_out):  # iterate over the different output neurons
+
+            # if the number of connections for the output neuron has reached its limit
+            # continue to the next output neuron
             if c_out_in[j] >= nb_out_in[j] or w[i, j] > 0:
                 continue
             w[i, j] = 1
             i = (i + 1) % nb_in
             c_out_in[j] += 1
+        if i == ii:
+            i = (i + 1) % nb_in
+
     w = rng.permutation(w)
     if normalise:
         w = w / w.sum(axis=0)
@@ -231,9 +273,9 @@ def sinusoidal_synapses(nb_in, nb_out, fill_value=1., dtype='float32', bias=None
         the generated synaptic weights and the bias (if requested)
     """
     w = np.zeros((nb_in, nb_out), dtype=dtype)
-    sinusoid = fill_value * (-np.cos(np.linspace(0, 2 * np.pi, nb_out, endpoint=False)) + 1) / 2
+    pref_in = np.linspace(0, 2*np.pi, nb_in, endpoint=False)
     for i in range(nb_in):
-        w[i, :] = np.roll(sinusoid, i)
+        w[i, :] = fill_value * (-np.cos(np.linspace(0, 2 * np.pi, nb_out, endpoint=False) + pref_in[i]) + 1) / 2
     if bias is None:
         return w
     else:
@@ -331,7 +373,7 @@ def dct_omm_synapses(omm_ori, dtype='float32'):
     return A.T
 
 
-def whitening_synapses(samples, samples_mean=None, w_func=pca, dtype='float32', bias=None):
+def whitening_synapses(samples, nb_out=None, samples_mean=None, w_func=pca, dtype='float32', bias=None):
     """
     Whitening synapses based on the samples and function.
 
@@ -356,7 +398,7 @@ def whitening_synapses(samples, samples_mean=None, w_func=pca, dtype='float32', 
     if samples_mean is None:
         samples_mean = samples.mean(axis=0)
 
-    w = w_func(samples, m=samples_mean, dtype=dtype)
+    w = w_func(samples, nb_out=nb_out, m=samples_mean, dtype=dtype)
 
     if bias:
         return w, samples_mean
