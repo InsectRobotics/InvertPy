@@ -1,3 +1,3 @@
 from .centralcomplex import CentralComplexBase
 from .stone import StoneCX
-from .gkanias import GkaniasCX
+from .vectormemory import VectorMemoryCX
