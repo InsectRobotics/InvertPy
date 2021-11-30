@@ -134,16 +134,18 @@ class CompoundEye(Sensor):
     def reset(self):
         nb_omm = self.nb_ommatidia
 
+        nb_samples = 6
+
         # create the 6 Gaussian samples for each ommatidium
         omm_ori_gau = [R.from_euler('Z', np.zeros((nb_omm, 1), dtype=self.dtype)) for _ in range(6)]
-        for i in range(6):
+        for i in range(nb_samples):
             ori_p = R.from_euler(
-                'XY', np.vstack([np.full_like(self._omm_rho, i*np.pi/3), self._omm_rho/2]).T)
+                'XY', np.vstack([np.full_like(self._omm_rho, i*2*np.pi/nb_samples), self._omm_rho/2]).T)
             omm_ori_gau[i] = self.omm_ori * ori_p
         # augment the sampling points with the Gaussian samples
         self._omm_ori = R.from_quat(
             np.vstack([self.omm_ori.as_quat()] + [oog.as_quat() for oog in omm_ori_gau]))
-        omm_ori_gau = [self._omm_ori[(i+1) * self.nb_ommatidia:(i+2) * self.nb_ommatidia] for i in range(6)]
+        omm_ori_gau = [self._omm_ori[(i+1) * self.nb_ommatidia:(i+2) * self.nb_ommatidia] for i in range(nb_samples)]
 
         # reset to the initial orientation
         self._ori = copy(self._ori_init)
