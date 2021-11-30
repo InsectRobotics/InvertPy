@@ -8,4 +8,5 @@ that are fed to their brain.
 
 from .vision import CompoundEye
 from .polarisation import PolarisationSensor
+from .olfaction import Antennas
 from .sensor import Sensor

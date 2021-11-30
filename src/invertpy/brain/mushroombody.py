@@ -895,7 +895,7 @@ class CrossIncentive(IncentiveCircuit):
         return super().__repr__().replace("IncentiveCircuit", "CrossIncentive")
 
 
-class FamiliarityCircuit(IncentiveCircuit):
+class VectorMemoryMB(IncentiveCircuit):
     def __init__(self, nb_cs, nb_us=None, nb_kc=None, nb_dan=None, nb_mbon=None, learning_rule='dopaminergic',
                  *args, **kwargs):
         """
