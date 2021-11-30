@@ -895,231 +895,139 @@ class CrossIncentive(IncentiveCircuit):
         return super().__repr__().replace("IncentiveCircuit", "CrossIncentive")
 
 
-class SusceptibleMemory(IncentiveCircuit):
-    def __init__(self, *args, **kwargs):
+class FamiliarityCircuit(IncentiveCircuit):
+    def __init__(self, nb_cs, nb_us=None, nb_kc=None, nb_dan=None, nb_mbon=None, learning_rule='dopaminergic',
+                 *args, **kwargs):
         """
-        The Susceptible Memory is a sub-circuit of the Incentive Circuit that has only susceptible MBONs and discharging
-        DANs. This model was first presented in Gkanias et al (2021).
+        The Incentive Wheel is an extension of the Incentive Circuit and more complete model of the Mushroom Body that
+        encodes the memory dynamics of model related with the susceptible, restrained and lont-term memory MBONs. It
+        contains MBON-DAN and MBON-MBON feedback connections similarly to the Incentive Circuit, but it also connects
+        different incentive circuits that share MBONs with different roles. This model was first presented in
+        Gkanias et al (2021).
+
+        Parameters
+        ----------
+        nb_cs: int, optional
+        nb_us: int, optional
+        nb_kc: int, optional
+        nb_apl: int, optional
+        nb_dan: int, optional
+        nb_mbon: int, optional
+        learning_rule
         """
-        kwargs.setdefault('ltm_charging_speed', 0.5)
-        super().__init__(*args, **kwargs)
 
-        self.mbon_names = self.mbon_names[:2]
-        self.dan_names = self.dan_names[:2]
+        if nb_us is None and nb_dan is not None:
+            nb_us = nb_dan // 3
+        elif nb_us is None and nb_mbon is not None:
+            nb_us = nb_mbon // 3
+        elif nb_us is None:
+            nb_us = 4
+        if nb_kc is None:
+            nb_kc = 40 * nb_cs
+        if nb_dan is None:
+            nb_dan = 3 * nb_us
+        if nb_mbon is None:
+            nb_mbon = nb_dan
 
-    def reset(self, *args, **kwargs):
-        super().reset(has_sm=True, has_rm=False, has_ltm=False, has_rrm=False, has_rfm=False, has_mam=False)
+        self._pds, self._pde = 0, nb_dan // 3  # d-DANs
+        self._pcs, self._pce = nb_dan // 3, 2 * nb_dan // 3  # c-DANs
+        self._pfs, self._pfe = 2 * nb_dan // 3, 3 * nb_dan // 3  # m-DANs
+        self._pss, self._pse = 0, nb_mbon // 3  # s-MBONs
+        self._prs, self._pre = nb_mbon // 3, 2 * nb_mbon // 3  # r-MBONs
+        self._pms, self._pme = 2 * nb_mbon // 3,  3 * nb_mbon // 3  # m-MBONs
 
-        self.b_m[self._prs:self._pre] = -2.
-        self.b_m[self._pms:self._pme] = -4.
+        kwargs.setdefault("ltm_charging_speed", .3)
+        super().__init__(nb_cs=nb_cs, nb_us=nb_us, nb_kc=nb_kc, nb_dan=nb_dan,
+                         nb_mbon=nb_mbon, learning_rule=learning_rule, *args, **kwargs)
 
-        self._mbon[0] = self.b_m.copy()
+        self.us_names = ["novelty", "familiarity home"] + [f"familiarity {chr(ord('A') + s)}" for s in range(nb_us - 2)]
+        self.mbon_names = (["s_{nov}", "s_{home}"] + [f"s_{{{chr(ord('A') + s)}}}" for s in range(nb_us - 2)] +
+                           ["r_{nov}", "r_{home}"] + [f"r_{{{chr(ord('A') + s)}}}" for s in range(nb_us - 2)] +
+                           ["m_{nov}", "m_{home}"] + [f"m_{{{chr(ord('A') + s)}}}" for s in range(nb_us - 2)])
+        self.dan_names = (["d_{nov}", "d_{home}"] + [f"d_{{{chr(ord('A') + s)}}}" for s in range(nb_us - 2)] +
+                          ["c_{nov}", "c_{home}"] + [f"c_{{{chr(ord('A') + s)}}}" for s in range(nb_us - 2)] +
+                          ["f_{nov}", "f_{home}"] + [f"f_{{{chr(ord('A') + s)}}}" for s in range(nb_us - 2)])
 
-    def _fprop(self, *args, **kwargs):
-        mbons = super()._fprop(*args, **kwargs)
-        return mbons[:2]
+    def reset(self, **kwargs):
+        super().reset(**kwargs)
+
+        pds, pde = self._pds, self._pde
+        pcs, pce = self._pcs, self._pce
+        pfs, pfe = self._pfs, self._pfe
+        pss, pse = self._pss, self._pse
+        prs, pre = self._prs, self._pre
+        pms, pme = self._pms, self._pme
+
+        self.b_d[pds:pde] = 0.
+        self.b_d[pcs:pce] = 0.
+        self.b_d[pfs:pfe] = 0.
+        self.b_m[pss:pse] = 0.
+        self.b_m[prs:pre] = 0.
+        self.b_m[pms:pme] = 0.
+
+        self._dan[0, :, ...] = self.b_d.copy()
+        self._mbon[0, :, ...] = self.b_m.copy()
+
+        self.w_d2m *= 0.
+        self.w_m2m *= 0.
+        self.w_m2d *= 0.
+
+        # SUSCEPTIBLE MEMORY (SM) microcircuit
+
+        # Susceptible MBONs inhibit their opposite discharging DANs
+        self.w_m2d[pss:pse, pds:pde] += np.array(
+            [[0.] + [1.] * (self.nb_dan // 3 - 1)] +
+            [[1.] + [0.] * (self.nb_dan // 3 - 1)] * (self.nb_mbon // 3 - 1),
+            dtype=self.dtype) * (-1.)
+
+        # Discharging DANs depress their opposite susceptible MBONs
+        self.w_d2m[pds:pde, pss:pse] += np.array(
+            [[0.] + [1.] * (self.nb_mbon // 3 - 1)] +
+            [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
+            dtype=self.dtype) * (-1)
+
+        # RESTRAINED MEMORY (RM) microcircuit
+
+        # Susceptible MBONs depress their opposite restrained MBONs
+        self.w_m2m[pss:pse, prs:pre] = np.array(
+            [[0.] + [1.] * (self.nb_mbon // 3 - 1)] +
+            [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_mbon // 3 - 1),
+            dtype=self.dtype) * (-1.)
+
+        # RECIPROCAL SHORT-TERM MEMORIES (RSM) microcircuit
+
+        # Restrained MBONs excite their respective charging DANs
+        self.w_m2d[prs:pre, pcs:pce] += diagonal_synapses(pre-prs, pce-pcs, fill_value=1., dtype=self.dtype)
+
+        # Charging DANs depress their opposite restrained MBONs
+        self.w_d2m[pcs:pce, prs:pre] += np.array(
+            [[0.] + [1.] * (self.nb_mbon // 3 - 1)] +
+            [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
+            dtype=self.dtype) * (-1)
+
+        # LONG-TERM MEMORY (LTM) microcircuit
+
+        # LTM MBONs excite their respective charging DANs
+        self.w_m2d[pms:pme, pcs:pce] += np.eye(self.nb_mbon // 3) * self.memory_charging_speed
+
+        # Charging DANs potentiate their respective LTM MBONs
+        self.w_d2m[pcs:pce, pms:pme] += np.eye(self.nb_mbon // 3) * self.memory_charging_speed
+
+        # RECIPROCAL LONG-TERM MEMORIES (RLM) microcircuit
+
+        # LTM MBONs excite their respective forgetting DANs
+        self.w_m2d[pms:pme, pfs:pfe] += diagonal_synapses(pme-pms, pfe-pfs, fill_value=1., dtype=self.dtype)
+
+        # Forgetting DANs depress their opposite long-term memory MBONs
+        self.w_d2m[pfs:pfe, pms:pme] += np.array(
+            [[0.] + [1.] * (self.nb_mbon // 3 - 1)] +
+            [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
+            dtype=self.dtype) * (-1)
+
+        # MEMORY ASSIMILATION MECHANISM (MAM) microcircuit
+
+        # Forgetting DANs depress their respective restrained MBONs
+        self.w_d2m[pfs:pfe, prs:pre] += np.eye(self.nb_mbon // 3) * (-self.memory_charging_speed)
 
     def __repr__(self):
-        return "SusceptibleMemory(CS=%d, US=%d, KC=%d, DAN=2, MBON=2, plasticity='%s')" % (
-            self.nb_cs, self.nb_cs, self.nb_cs, self.learning_rule
-        )
-
-    @property
-    def r_mbon(self):
-        return super().r_mbon[..., :2]
-
-    @property
-    def r_dan(self):
-        return super().r_dan[..., :2]
-
-
-class RestrainedMemory(IncentiveCircuit):
-    def __init__(self, *args, **kwargs):
-        """
-        The Restrained Memory is a sub-circuit of the Incentive Circuit that has only susceptible and restrained MBONs
-        and discharging DANs. This model was first presented in Gkanias et al (2021).
-        """
-        kwargs.setdefault('ltm_charging_speed', 0.5)
-        super().__init__(*args, **kwargs)
-
-        self.mbon_names = self.mbon_names[:4]
-        self.dan_names = self.dan_names[:2]
-
-    def reset(self, *args, **kwargs):
-        super().reset(has_sm=True, has_rm=True, has_ltm=False, has_rrm=False, has_rfm=False, has_mam=False)
-
-        self.b_m[self._prs:self._pre] = -2.
-        self.b_m[self._pms:self._pme] = -4.
-
-        self._mbon[0] = self.b_m.copy()
-
-    def _fprop(self, *args, **kwargs):
-        mbons = super()._fprop(*args, **kwargs)
-        return mbons[:4]
-
-    def __repr__(self):
-        return "RestrainedMemory(CS=%d, US=%d, KC=%d, DAN=2, MBON=4, plasticity='%s')" % (
-            self.nb_cs, self.nb_cs, self.nb_cs, self.learning_rule
-        )
-
-    @property
-    def r_mbon(self):
-        return super().r_mbon[..., :4]
-
-    @property
-    def r_dan(self):
-        return super().r_dan[..., :2]
-
-
-class LongTermMemory(IncentiveCircuit):
-    def __init__(self, *args, **kwargs):
-        """
-        The Long-term Memory is a sub-circuit of the Incentive Circuit that has only long-term memory MBONs
-        and charging DANs. This model was first presented in Gkanias et al (2021).
-        """
-        kwargs.setdefault('ltm_charging_speed', 0.5)
-        super().__init__(*args, **kwargs)
-
-        self.mbon_names = self.mbon_names[4:6]
-        self.dan_names = self.dan_names[2:4]
-
-    def reset(self, *args, **kwargs):
-        super().reset(has_sm=True, has_rm=True, has_ltm=True, has_rrm=False, has_rfm=False, has_mam=False)
-
-        self.b_m[self._prs:self._pre] = -2.
-        self.b_m[self._pms:self._pme] = -4.
-
-        self._mbon[0] = self.b_m.copy()
-
-    def _fprop(self, *args, **kwargs):
-        mbons = super()._fprop(*args, **kwargs)
-        return mbons[4:6]
-
-    def __repr__(self):
-        return "LongTermMemory(CS=%d, US=%d, KC=%d, DAN=2, MBON=2, LTM_charging_speed=%.2f, plasticity='%s')" % (
-            self.nb_cs, self.nb_cs, self.nb_cs, self._memory_charging_speed, self.learning_rule
-        )
-
-    @property
-    def r_mbon(self):
-        return super().r_mbon[..., 4:6]
-
-    @property
-    def r_dan(self):
-        return super().r_dan[..., 2:4]
-
-
-class ReciprocalRestrainedMemories(IncentiveCircuit):
-    def __init__(self, *args, **kwargs):
-        """
-        The Reciprocal Restrained Memories is a sub-circuit of the Incentive Circuit that has only restrained MBONs and
-        charging DANs. This model was first presented in Gkanias et al (2021).
-        """
-        kwargs.setdefault('ltm_charging_speed', 0.5)
-        super().__init__(*args, **kwargs)
-
-        self.mbon_names = self.mbon_names[2:4]
-        self.dan_names = self.dan_names[2:4]
-
-    def reset(self, *args, **kwargs):
-        super().reset(has_sm=True, has_rm=True, has_ltm=False, has_rrm=True, has_rfm=False, has_mam=False)
-
-        self.b_m[self._prs:self._pre] = -2.
-        self.b_m[self._pms:self._pme] = -4.
-
-        self._mbon[0] = self.b_m.copy()
-
-    def _fprop(self, *args, **kwargs):
-        mbons = super()._fprop(*args, **kwargs)
-        return mbons[2:4]
-
-    def __repr__(self):
-        return "ReciprocalRestrainedMemories(CS=%d, US=%d, KC=%d, DAN=2, MBON=2, plasticity='%s')" % (
-            self.nb_cs, self.nb_cs, self.nb_cs, self.learning_rule
-        )
-
-    @property
-    def r_mbon(self):
-        return super().r_mbon[..., 2:4]
-
-    @property
-    def r_dan(self):
-        return super().r_dan[..., 2:4]
-
-
-class ReciprocalForgettingMemories(IncentiveCircuit):
-    def __init__(self, *args, **kwargs):
-        """
-        The Reciprocal Forgetting Memories is a sub-circuit of the Incentive Circuit that has only long-term memory
-        MBONs and forgetting DANs. This model was first presented in Gkanias et al (2021).
-        """
-        kwargs.setdefault('ltm_charging_speed', 0.5)
-        super().__init__(*args, **kwargs)
-
-        self.mbon_names = self.mbon_names[4:6]
-        self.dan_names = self.dan_names[4:6]
-
-    def reset(self, *args, **kwargs):
-        super().reset(has_sm=True, has_rm=True, has_ltm=True, has_rrm=True, has_rfm=True, has_mam=False)
-
-        self.b_m[self._prs:self._pre] = -2.
-        self.b_m[self._pms:self._pme] = -4.
-
-        self._mbon[0] = self.b_m.copy()
-
-    def _fprop(self, *args, **kwargs):
-        mbons = super()._fprop(*args, **kwargs)
-        return mbons[4:6]
-
-    def __repr__(self):
-        return ("ReciprocalForgettingMemories(CS=%d, US=%d, KC=%d, DAN=2, MBON=2, LTM_charging_speed=%.2f,"
-                " plasticity='%s')") % (
-            self.nb_cs, self.nb_cs, self.nb_cs, self._memory_charging_speed, self.learning_rule
-        )
-
-    @property
-    def r_mbon(self):
-        return super().r_mbon[..., 4:6]
-
-    @property
-    def r_dan(self):
-        return super().r_dan[..., 4:6]
-
-
-class MemoryAssimilationMechanism(IncentiveCircuit):
-    def __init__(self, *args, **kwargs):
-        """
-        The Memory Assimilation Mechanism is a sub-circuit of the Incentive Circuit that has only restrained and
-        long-term memory MBONs and charging and forgetting DANs. This model was first presented in Gkanias et al (2021).
-        """
-        kwargs.setdefault('ltm_charging_speed', 0.5)
-        super().__init__(*args, **kwargs)
-
-        self.mbon_names = self.mbon_names[2:6]
-        self.dan_names = self.dan_names[2:6]
-
-    def reset(self, *args, **kwargs):
-        super().reset(has_sm=True, has_rm=True, has_ltm=True, has_rrm=True, has_rfm=True, has_mam=True)
-
-        self.b_m[self._prs:self._pre] = -2.
-        self.b_m[self._pms:self._pme] = -4.
-
-        self._mbon[0] = self.b_m.copy()
-
-    def _fprop(self, *args, **kwargs):
-        mbons = super()._fprop(*args, **kwargs)
-        return mbons[2:6]
-
-    def __repr__(self):
-        return ("MemoryAssimilationMechanism(CS=%d, US=%d, KC=%d, DAN=4, MBON=4, LTM_charging_speed=%.2f,"
-                " plasticity='%s')") % (
-            self.nb_cs, self.nb_cs, self.nb_cs, self._memory_charging_speed, self.learning_rule
-        )
-
-    @property
-    def r_mbon(self):
-        return super().r_mbon[..., 2:6]
-
-    @property
-    def r_dan(self):
-        return super().r_dan[..., 2:6]
+        return super().__repr__().replace("IncentiveCircuit", "FamiliarityCircuit")
