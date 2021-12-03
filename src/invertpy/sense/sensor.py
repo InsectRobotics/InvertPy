@@ -54,6 +54,7 @@ class Sensor(object):
         self.noise = noise
         self.dtype = dtype
 
+        self.rng = rng
         self.name = name
 
     def reset(self):

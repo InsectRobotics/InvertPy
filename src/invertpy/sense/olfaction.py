@@ -6,7 +6,7 @@ import numpy as np
 
 
 class Antennas(Sensor):
-    def __init__(self, nb_tactile=1, nb_chemical=2, nb_chemical_dimensions=21, length=.01, *args, **kwargs):
+    def __init__(self, nb_tactile=1, nb_chemical=2, nb_chemical_dimensions=21, length=.01, tol=4e-01, *args, **kwargs):
         """
         The Antennas class is a representation of the pair of insect antennas as a simple sensor.
 
@@ -24,6 +24,8 @@ class Antennas(Sensor):
             can discriminate. Default is 21
         length : float, optional
             the length of each antenna (in meters). Default is 1cm
+        tol : float
+            the tolerance of accepted intensities. Default is 0.2
         """
 
         kwargs.setdefault('nb_output', (2, nb_chemical * nb_chemical_dimensions + nb_tactile))
@@ -39,6 +41,7 @@ class Antennas(Sensor):
         self._tactile_x = np.linspace(1, 0, nb_tactile, endpoint=False)
         self._chemical_x = np.linspace(1, 0, nb_chemical, endpoint=False)
         self._nb_dimensions = nb_chemical_dimensions
+        self._tol = tol
 
         self._r = None
         self._r_tactile = None
@@ -75,9 +78,10 @@ class Antennas(Sensor):
             pois_loc[:chemical_xyz.shape[0]] = self._ant_base[0] + self._ant_ori[0].apply(chemical_xyz)
             pois_loc[chemical_xyz.shape[0]:] = self._ant_base[1] + self._ant_ori[1].apply(chemical_xyz)
             # rotate the head-centric vectors to the global coordinate system and add the global position of the sensor
-            pois_glob = self.xyz + self.ori.apply(pois_loc)
+            pois_glob = self.xyz.reshape((1, -1)) + self.ori.apply(pois_loc)
             for i, odour in enumerate(odours):
                 odour_intensities[:, i] = odour(pois_glob)
+            odour_intensities[odour_intensities < self._tol] = 0.
 
             r_chemical[0] = odour_intensities[:chemical_xyz.shape[0]].flatten()  # left antenna
             r_chemical[1] = odour_intensities[chemical_xyz.shape[0]:].flatten()  # right antenna
@@ -90,6 +94,13 @@ class Antennas(Sensor):
         self._r[:] = np.hstack([r_tactile, r_chemical])
 
         return self._r
+
+    def __repr__(self):
+        return ("Antennas(units=%d, tactile=%.0f, chemical=%d, dimensions=%d, "
+                "pos=(%.2f, %.2f, %.2f), ori=(%.2f, %.2f, %.2f), name='%s')") % (
+            self.nb_antennas, self.nb_tactile, self.nb_chemical, self._nb_dimensions,
+            self.x, self.y, self.z, self.yaw_deg, self.pitch_deg, self.roll_deg, self.name
+        )
 
     @property
     def antennas_tip(self):
@@ -178,3 +189,14 @@ class Antennas(Sensor):
         np.ndarray[float]
         """
         return self._r_chemical
+
+    @property
+    def tolerance(self):
+        """
+        The lowest detectable odour intensity.
+
+        Returns
+        -------
+        float
+        """
+        return self._tol
