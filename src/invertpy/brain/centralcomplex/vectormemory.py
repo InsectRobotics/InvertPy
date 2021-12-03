@@ -34,7 +34,7 @@ x = np.linspace(0, 2 * np.pi, N_COLUMNS, endpoint=False)
 class VectorMemoryCX(CentralComplexBase):
 
     def __init__(self, nb_tb1=8, nb_tn1=2, nb_tn2=2, nb_cl1=16, nb_tl2=16, nb_cpu4=16, nb_cpu1a=14, nb_cpu1b=2,
-                 nb_rings=4, nb_motivations=2, tn_prefs=np.pi / 4, gain=0.05, pontin=False, *args, **kwargs):
+                 nb_rings=4, nb_mbon=2, tn_prefs=np.pi / 4, gain=0.05, pontin=False, *args, **kwargs):
         """
         The Central Complex model of [1]_ as a component of the locust brain.
 
@@ -58,7 +58,7 @@ class VectorMemoryCX(CentralComplexBase):
             the number of CPU1b neurons. Default is 2
         nb_rings: int, optional
             the maximum number of PI vectors to store. Default is 4
-        nb_motivations: int, optional
+        nb_mbon: int, optional
             the number of motivations for which vector to use. Default is 2 (homing and foraging)
         tn_prefs: float, optional
             the angular offset of preference of the TN neurons from the front direction. Default is pi/4
@@ -97,7 +97,7 @@ class VectorMemoryCX(CentralComplexBase):
         self._nb_cpu1a = nb_cpu1a
         self._nb_cpu1b = nb_cpu1b
         self._nb_rings = nb_rings
-        self._nb_mot = nb_motivations
+        self._nb_mbon = nb_mbon
 
         # initialise the responses of the neurons
         self._tl2 = np.zeros(self.nb_tl2)
@@ -105,7 +105,7 @@ class VectorMemoryCX(CentralComplexBase):
         self._tn1 = np.zeros(self.nb_tn1)
         self._tn2 = np.zeros(self.nb_tn2)
         self._vec = np.zeros(self.nb_rings)
-        self._mot = np.zeros(self.nb_motivations)
+        self._mbon = np.zeros(self.nb_mbon)
         self._vec_t = np.zeros_like(self._vec)
 
         # Weight matrices based on anatomy (These are not changeable!)
@@ -118,7 +118,7 @@ class VectorMemoryCX(CentralComplexBase):
         self._w_cpu42pontin = uniform_synapses(self.nb_cpu4, self.nb_cpu4, fill_value=0, dtype=self.dtype)
 
         # cpu4 memory
-        self._w_mot2vec = uniform_synapses(self.nb_motivations, self.nb_rings, fill_value=0, dtype=self.dtype)
+        self._w_mbon2vec = uniform_synapses(self.nb_mbon, self.nb_rings, fill_value=0, dtype=self.dtype)
         self._w_vec2cpu4 = uniform_synapses(self.nb_rings, self.nb_cpu4, fill_value=.5, dtype=self.dtype)
         self._w_ring2cpu4 = uniform_synapses(self.nb_cpu4 // 2, self.nb_cpu4, fill_value=0, dtype=self.dtype)
 
@@ -189,10 +189,10 @@ class VectorMemoryCX(CentralComplexBase):
 
         self.w_cpu42pontin = diagonal_synapses(self.nb_cpu4, self.nb_cpu4, fill_value=1, dtype=self.dtype)
 
-        self.w_mot2vec = np.zeros_like(self._w_mot2vec)
-        self.w_mot2vec[0, 0] = 1
-        self.w_mot2vec[1:, 1:] = diagonal_synapses(self._nb_mot - 1, self.nb_rings - 1, fill_value=1.,
-                                                   tile=True, dtype=self.dtype)
+        self.w_mbon2vec = np.zeros_like(self._w_mbon2vec)
+        self.w_mbon2vec[0, 0] = 1
+        self.w_mbon2vec[1:, 1:] = diagonal_synapses(self._nb_mbon - 1, self.nb_rings - 1, fill_value=1.,
+                                                    tile=True, dtype=self.dtype)
         self.w_vec2cpu4 = uniform_synapses(self.nb_rings, self.nb_cpu4, fill_value=.5, dtype=self.dtype)
         self.w_ring2cpu4 = pattern_synapses(
             pattern=diagonal_synapses(self.nb_cpu4 // 2, self.nb_cpu4 // 2, fill_value=1, dtype=self.dtype),
@@ -209,7 +209,7 @@ class VectorMemoryCX(CentralComplexBase):
         self._vec_t = np.zeros_like(self._vec)
         self.update = True
 
-    def _fprop(self, phi, flow, tl2=None, cl1=None, motivation=None, visual_rings=None):
+    def _fprop(self, phi, flow, tl2=None, cl1=None, mbon=None, visual_rings=None):
         """
         Parameters
         ----------
@@ -221,8 +221,8 @@ class VectorMemoryCX(CentralComplexBase):
             the TL2 responses
         cl1 : np.ndarray[float]
             the CL1 responses
-        motivation: np.ndarray[float]
-            the motivations come from the mushroom body
+        mbon: np.ndarray[float]
+            the MBON activity comes from the mushroom body
         visual_rings: np.ndarray[float]
             rings based on teh visual cues
 
@@ -232,19 +232,19 @@ class VectorMemoryCX(CentralComplexBase):
             the CPU1 responses that are used for steering
         """
 
-        if motivation is None:  # default is homing PI
-            motivation = np.zeros_like(self._mot)
-            motivation[0] = 1.
+        if mbon is None:  # default is homing PI
+            mbon = np.zeros_like(self._mbon)
+            mbon[0] = 1.
 
         # select vector based on motivation
-        vec_mot = np.dot(motivation, self.w_mot2vec)
+        vec_mot = np.dot(mbon, self.w_mbon2vec)
         # select most recent vector
         vec_tim = np.exp(-self._vec_t)
         # get the closest memory
         vec_dis = 1 - self.get_vectors_distance()
         # weight more the closest vector
         a_vec = self.f_vec(vec_mot * vec_tim * vec_dis)
-        print(f"vec: {a_vec}, mot: {vec_mot}, time: {vec_tim}, dist: {vec_dis}, all: {vec_mot * vec_tim * vec_dis}")
+        # print(f"vec: {a_vec}, mot: {vec_mot}, time: {vec_tim}, dist: {vec_dis}, all: {vec_mot * vec_tim * vec_dis}")
 
         if isinstance(phi, np.ndarray) and phi.size == 8:
             if tl2 is None:
@@ -320,7 +320,7 @@ class VectorMemoryCX(CentralComplexBase):
             cpu1b = (a_cpu4 @ self.w_cpu42cpu1b) * ((a_tb1 - 1.) @ self.w_tb12cpu1b)
 
         self._ste = a_cpu1 = self.f_cpu1(np.hstack([cpu1b[-1], cpu1a, cpu1b[0]]))
-        self._mot = motivation
+        self._mbon = mbon
         self._vec = a_vec
 
         return a_cpu1
@@ -359,9 +359,9 @@ class VectorMemoryCX(CentralComplexBase):
             return np.dot(bias, np.maximum(w.T, 0.5))
 
     def __repr__(self):
-        return "GkaniasCX(TB1=%d, TN1=%d, TN2=%d, CL1=%d, TL2=%d, CPU4=%d, CPU1=%d)" % (
-            self.nb_tb1, self.nb_tn1, self.nb_tn2, self.nb_cl1, self.nb_tl2, self.nb_cpu4, self.nb_cpu1
-        )
+        return f"VectorMemoryCX(TB1={self.nb_tb1:d}, TN1={self.nb_tn1:d}, TN2={self.nb_tn2:d}," \
+               f" CL1={self.nb_cl1:d}, TL2={self.nb_tl2}, CPU4={self.nb_cpu4:d}," \
+               f" MBON={self.nb_mbon:d}, vectors={self.nb_rings:d}, CPU1={self.nb_cpu1:d})"
 
     def get_flow(self, heading, velocity, filter_steps=0):
         """
@@ -548,7 +548,7 @@ class VectorMemoryCX(CentralComplexBase):
         self._w_c2s[:, :1] = v[:, -1:]
 
     @property
-    def w_mot2vec(self):
+    def w_mbon2vec(self):
         """
         The motivation to vector selection synaptic weights.
 
@@ -556,11 +556,11 @@ class VectorMemoryCX(CentralComplexBase):
         -------
         np.ndarray[float]
         """
-        return self._w_mot2vec
+        return self._w_mbon2vec
 
-    @w_mot2vec.setter
-    def w_mot2vec(self, v):
-        self._w_mot2vec[:] = v[:]
+    @w_mbon2vec.setter
+    def w_mbon2vec(self, v):
+        self._w_mbon2vec[:] = v[:]
 
     @property
     def w_vec2cpu4(self):
@@ -1006,7 +1006,7 @@ class VectorMemoryCX(CentralComplexBase):
         return self._nb_rings
 
     @property
-    def nb_motivations(self):
+    def nb_mbon(self):
         """
         The number of motivations supported.
 
@@ -1014,4 +1014,4 @@ class VectorMemoryCX(CentralComplexBase):
         -------
         int
         """
-        return self._nb_mot
+        return self._nb_mbon
