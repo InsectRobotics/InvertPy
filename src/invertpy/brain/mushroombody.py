@@ -83,13 +83,14 @@ class MushroomBody(Component):
         self._w_m2m, self._b_m = uniform_synapses(nb_mbon, nb_mbon, dtype=self.dtype, bias=0)
         self._w_u2d = uniform_synapses(nb_us, nb_dan, dtype=self.dtype)
         self._w_m2d, self._b_d = uniform_synapses(nb_mbon, nb_dan, dtype=self.dtype, bias=0)
+        self._w_d2d = uniform_synapses(nb_dan, nb_dan, dtype=self.dtype)
         self._w_k2a, self._b_a = uniform_synapses(nb_kc, nb_apl, dtype=self.dtype, bias=0)
 
         self._w_d2m = uniform_synapses(nb_dan, nb_mbon, dtype=self.dtype)
         self._w_rest = uniform_synapses(nb_kc, nb_mbon, dtype=self.dtype)
 
-        self.params.extend([self.w_c2k, self.w_a2k, self.w_k2m, self.w_m2m, self.w_u2d, self.w_m2d, self.w_k2a,
-                            self.w_d2m, self.w_rest, self.b_k, self.b_m, self.b_d, self.b_a])
+        self.params.extend([self.w_c2k, self.w_a2k, self.w_k2m, self.w_m2m, self.w_u2d, self.w_m2d, self._w_d2d,
+                            self.w_k2a, self.w_d2m, self.w_rest, self.b_k, self.b_m, self.b_d, self.b_a])
 
         # reserve space for the responses
         self._cs = np.zeros((self._repeats, nb_cs), dtype=self.dtype)
@@ -310,7 +311,7 @@ class MushroomBody(Component):
         us = np.array(us, dtype=self.dtype)
         a_us = self.f_us(us)
 
-        _dan = a_us @ self.w_u2d + mbon_pre @ self.w_m2d + self.b_d
+        _dan = a_us @ self.w_u2d + mbon_pre @ self.w_m2d + dan_pre @ self.w_d2d + self.b_d
         a_dan = self.f_dan(self.update_values(_dan, v_pre=dan_pre, eta=None if v_update else (1. - self._lambda)))
 
         _apl = kc_pre @ self.w_k2a + self.b_a
@@ -411,6 +412,17 @@ class MushroomBody(Component):
     @w_m2d.setter
     def w_m2d(self, v):
         self._w_m2d[:] = v[:]
+
+    @property
+    def w_d2d(self):
+        """
+        The DAN-DAN synaptic weights.
+        """
+        return self._w_m2d
+
+    @w_d2d.setter
+    def w_d2d(self, v):
+        self._w_d2d[:] = v
 
     @property
     def w_k2a(self):
@@ -612,6 +624,7 @@ class IncentiveCircuit(MushroomBody):
         ltm_charging_speed: float, optional
             the charging (and discharging) speed of the long-term memory MBONs.
         """
+        kwargs.setdefault('nb_repeats', 4)
 
         self._cs_magnitude = cs_magnitude
         self._us_magnitude = us_magnitude
@@ -652,12 +665,18 @@ class IncentiveCircuit(MushroomBody):
         self.w_m2d, self.b_d = uniform_synapses(self.nb_mbon, self.nb_dan, dtype=self.dtype, bias=0.)
         self.w_m2m = uniform_synapses(self.nb_mbon, self.nb_mbon, dtype=self.dtype)
 
-        self.b_d[pds:pde] = -.5
-        self.b_d[pcs:pce] = -.15
-        self.b_d[pfs:pfe] = -.15
+        # self.b_d[pds:pde] = -.5
+        # self.b_d[pcs:pce] = -.15
+        # self.b_d[pfs:pfe] = -.15
+        # self.b_m[pss:pse] = -2.
+        # self.b_m[prs:pre] = -2.
+        # self.b_m[pms:pme] = -2.
+        self.b_d[pds:pde] = 0.
+        self.b_d[pcs:pce] = 0.
+        self.b_d[pfs:pfe] = 0.
         self.b_m[pss:pse] = -2.
-        self.b_m[prs:pre] = -2.
-        self.b_m[pms:pme] = -2.
+        self.b_m[prs:pre] = 0.
+        self.b_m[pms:pme] = -1.
 
         self._dan[0] = self.b_d.copy()
         self._mbon[0] = self.b_m.copy()
@@ -915,6 +934,7 @@ class VectorMemoryMB(IncentiveCircuit):
         nb_mbon: int, optional
         learning_rule
         """
+        kwargs.setdefault('nb_repeats', 4)
 
         if nb_us is None and nb_dan is not None:
             nb_us = nb_dan // 3
@@ -961,9 +981,9 @@ class VectorMemoryMB(IncentiveCircuit):
         self.b_d[pds:pde] = 0.
         self.b_d[pcs:pce] = 0.
         self.b_d[pfs:pfe] = 0.
-        self.b_m[pss:pse] = 0.
-        self.b_m[prs:pre] = 0.
-        self.b_m[pms:pme] = 0.
+        self.b_m[pss:pse] = -1.
+        self.b_m[prs:pre] = -1
+        self.b_m[pms:pme] = -1.
 
         self._dan[0, :, ...] = self.b_d.copy()
         self._mbon[0, :, ...] = self.b_m.copy()
@@ -971,6 +991,7 @@ class VectorMemoryMB(IncentiveCircuit):
         self.w_d2m *= 0.
         self.w_m2m *= 0.
         self.w_m2d *= 0.
+        self.w_d2d *= 0.
 
         # SUSCEPTIBLE MEMORY (SM) microcircuit
 
@@ -984,7 +1005,7 @@ class VectorMemoryMB(IncentiveCircuit):
         self.w_d2m[pds:pde, pss:pse] += np.array(
             [[0.] + [1.] * (self.nb_mbon // 3 - 1)] +
             [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
-            dtype=self.dtype) * (-1)
+            dtype=self.dtype) * (-1.)
 
         # RESTRAINED MEMORY (RM) microcircuit
 
@@ -994,21 +1015,41 @@ class VectorMemoryMB(IncentiveCircuit):
             [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_mbon // 3 - 1),
             dtype=self.dtype) * (-1.)
 
+        # RESTRAINED MEMORY (RM) microcircuit
+
+        # Susceptible MBONs depress their opposite restrained MBONs
+        self.w_m2m[pss:pse, pss:pse] = np.array(
+            [[0.] + [1.] * (self.nb_mbon // 3 - 1)] +
+            [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_mbon // 3 - 1),
+            dtype=self.dtype) * (-1.)
+
         # RECIPROCAL SHORT-TERM MEMORIES (RSM) microcircuit
 
         # Restrained MBONs excite their respective charging DANs
         self.w_m2d[prs:pre, pcs:pce] += diagonal_synapses(pre-prs, pce-pcs, fill_value=1., dtype=self.dtype)
 
+        # Restrained MBONs inhibit the opposite charging DANs
+        self.w_m2d[prs:pre, pcs:pce] += np.array(
+            [[0.] + [1.] * (self.nb_mbon // 3 - 1)] +
+            [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
+            dtype=self.dtype) * (-1.)
+
+        # Charging DANs inhibit other charging DANs
+        self.w_d2d[pcs:pce, pcs:pce] += diagonal_synapses(pce-pcs, pce-pcs, fill_value=1., dtype=self.dtype) - 1
+
         # Charging DANs depress their opposite restrained MBONs
         self.w_d2m[pcs:pce, prs:pre] += np.array(
             [[0.] + [1.] * (self.nb_mbon // 3 - 1)] +
             [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
-            dtype=self.dtype) * (-1)
+            dtype=self.dtype) * (-1.)
 
         # LONG-TERM MEMORY (LTM) microcircuit
 
         # LTM MBONs excite their respective charging DANs
         self.w_m2d[pms:pme, pcs:pce] += np.eye(self.nb_mbon // 3) * self.memory_charging_speed
+
+        # Forgetting DANs inhibit other forgetting DANs
+        # self.w_d2d[pfs:pfe, pfs:pfe] += diagonal_synapses(pce-pcs, pce-pcs, fill_value=1., dtype=self.dtype) - 1
 
         # Charging DANs potentiate their respective LTM MBONs
         self.w_d2m[pcs:pce, pms:pme] += np.eye(self.nb_mbon // 3) * self.memory_charging_speed
@@ -1018,11 +1059,17 @@ class VectorMemoryMB(IncentiveCircuit):
         # LTM MBONs excite their respective forgetting DANs
         self.w_m2d[pms:pme, pfs:pfe] += diagonal_synapses(pme-pms, pfe-pfs, fill_value=1., dtype=self.dtype)
 
+        # LTM MBONs inhibit their opposite forgetting DANs
+        self.w_m2d[pms:pme, pfs:pfe] += np.array(
+            [[0.] + [1.] * (self.nb_mbon // 3 - 1)] +
+            [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
+            dtype=self.dtype) * (-1.)
+
         # Forgetting DANs depress their opposite long-term memory MBONs
         self.w_d2m[pfs:pfe, pms:pme] += np.array(
             [[0.] + [1.] * (self.nb_mbon // 3 - 1)] +
             [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
-            dtype=self.dtype) * (-1)
+            dtype=self.dtype) * (-1.)
 
         # MEMORY ASSIMILATION MECHANISM (MAM) microcircuit
 
@@ -1031,3 +1078,11 @@ class VectorMemoryMB(IncentiveCircuit):
 
     def __repr__(self):
         return super().__repr__().replace("IncentiveCircuit", "FamiliarityCircuit")
+
+    @property
+    def w_d2d(self):
+        return self._w_d2d
+
+    @w_d2d.setter
+    def w_d2d(self, v):
+        self._w_d2d[:] = v

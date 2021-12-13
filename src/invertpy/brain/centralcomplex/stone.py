@@ -149,11 +149,11 @@ class StoneCX(CentralComplexBase):
         # Weight matrices based on anatomy (These are not changeable!)
         self.w_tl22cl1 = diagonal_synapses(self.nb_tl2, self.nb_cl1, fill_value=-1, dtype=self.dtype)
         self.w_cl12tb1 = diagonal_synapses(self.nb_cl1, self.nb_tb1, fill_value=1, tile=True, dtype=self.dtype)
-        self.w_tb12tb1 = sinusoidal_synapses(self.nb_tb1, self.nb_tb1, fill_value=-1, dtype=self.dtype)
-        self.w_tb12cpu4 = diagonal_synapses(self.nb_tb1, self.nb_cpu4, fill_value=-1, tile=True, dtype=self.dtype)
+        self.w_tb12tb1 = sinusoidal_synapses(self.nb_tb1, self.nb_tb1, fill_value=1, dtype=self.dtype)
+        self.w_tb12cpu4 = diagonal_synapses(self.nb_tb1, self.nb_cpu4, fill_value=1, tile=True, dtype=self.dtype)
         self.w_tn22cpu4 = chessboard_synapses(self.nb_tn2, self.nb_cpu4, nb_rows=2, nb_cols=2, fill_value=1,
                                               dtype=self.dtype)
-        w_tb12cpu1 = diagonal_synapses(self.nb_tb1, self.nb_cpu1, fill_value=-1, tile=True)
+        w_tb12cpu1 = diagonal_synapses(self.nb_tb1, self.nb_cpu1, fill_value=1, tile=True)
         self.w_tb12cpu1a = w_tb12cpu1[:, 1:-1]
         self.w_tb12cpu1b = np.hstack([w_tb12cpu1[:, -1:], w_tb12cpu1[:, :1]])
 
@@ -183,6 +183,40 @@ class StoneCX(CentralComplexBase):
         self.r_cpu1 = np.zeros(self.nb_cpu1)
         self.__cpu4 = .5 * np.ones(self.nb_cpu4)  # cpu4 memory
 
+        # import matplotlib.pyplot as plt
+        #
+        # plt.figure(1, figsize=(4, 4))
+        # plt.imshow(self.w_cl12tb1, cmap="coolwarm", vmin=-1, vmax=1)
+        #
+        # plt.figure(2, figsize=(4, 4))
+        # plt.imshow(self.w_tb12tb1, cmap="coolwarm", vmin=-1, vmax=1)
+        #
+        # plt.figure(3, figsize=(4, 4))
+        # plt.imshow(self.w_tb12cpu1a, cmap="coolwarm", vmin=-1, vmax=1)
+        #
+        # plt.figure(4, figsize=(4, 4))
+        # plt.imshow(self.w_tb12cpu1b, cmap="coolwarm", vmin=-1, vmax=1)
+        #
+        # plt.figure(5, figsize=(4, 4))
+        # plt.imshow(self.w_tb12cpu4, cmap="coolwarm", vmin=-1, vmax=1)
+        #
+        # plt.figure(6, figsize=(4, 4))
+        # plt.imshow(self.w_tn22cpu4, cmap="coolwarm", vmin=-1, vmax=1)
+        #
+        # plt.figure(7, figsize=(4, 4))
+        # plt.imshow(self.w_cpu42cpu1a, cmap="coolwarm", vmin=-1, vmax=1)
+        #
+        # plt.figure(8, figsize=(4, 4))
+        # plt.imshow(self.w_cpu42cpu1b, cmap="coolwarm", vmin=-1, vmax=1)
+        #
+        # plt.figure(9, figsize=(4, 4))
+        # plt.imshow(self.w_cpu1a2motor, cmap="coolwarm", vmin=-1, vmax=1)
+        #
+        # plt.figure(10, figsize=(4, 4))
+        # plt.imshow(self.w_cpu1b2motor, cmap="coolwarm", vmin=-1, vmax=1)
+        #
+        # plt.show()
+
         self.update = True
 
     def _fprop(self, phi, flow, tl2=None, cl1=None):
@@ -196,23 +230,23 @@ class StoneCX(CentralComplexBase):
             self._com = a_tb1 = self.f_com(5. * phi[::-1])
         else:
             self._tl2 = a_tl2 = self.f_tl2(self.phi2tl2(phi))
-            self._cl1 = a_cl1 = self.f_cl1(a_tl2 @ self.w_tl22cl1)
+            self._cl1 = a_cl1 = self.f_cl1(a_tl2.dot(self.w_tl22cl1))
             if self._com is None:
                 self._com = a_tb1 = self.f_com(a_cl1)
             else:
                 p = .667  # proportion of input from CL1 to TB1
-                self._com = a_tb1 = self.f_com(p * a_cl1 @ self.w_cl12tb1 + (1 - p) * self._com @ self.w_tb12tb1)
+                self._com = a_tb1 = self.f_com(p * a_cl1.dot(self.w_cl12tb1) - (1 - p) * self._com.dot(self.w_tb12tb1))
         self._tn1 = a_tn1 = self.flow2tn1(flow)
         self._tn2 = a_tn2 = self.flow2tn2(flow)
 
         if self.pontin:
-            mem = .5 * self._gain * (np.clip(a_tn2 @ self.w_tn22cpu4 - a_tb1 @ self.w_tb12cpu4, 0, 1) - .25)
+            mem = .5 * self._gain * (np.clip(a_tn2.dot(self.w_tn22cpu4) - a_tb1.dot(self.w_tb12cpu4), 0, 1) - .25)
         else:
             # Idealised setup, where we can negate the TB1 sinusoid for memorising backwards motion
             # update = np.clip((.5 - tn1).dot(self.w_tn2cpu4), 0., 1.)  # normal
-            mem_tn1 = (.5 - a_tn1) @ self.w_tn22cpu4  # holonomic
+            mem_tn1 = np.clip((.5 - a_tn1).dot(self.w_tn22cpu4), 0., 1.)  # holonomic
 
-            mem_tb1 = self._gain * (a_tb1 - 1.) @ self.w_tb12cpu4
+            mem_tb1 = self._gain * (1 - a_tb1).dot(self.w_tb12cpu4)
             # update *= self.gain * (1. - tb1).dot(self.w_tb12cpu4)
 
             # Both CPU4 waves must have same average
@@ -225,26 +259,41 @@ class StoneCX(CentralComplexBase):
         cpu4_mem = np.clip(self.__cpu4 + mem, 0., 1.)
 
         if self.update:
-            self.__cpu4 = cpu4_mem
+            self.update_memory(cpu4_mem)
+
+        cpu4_mem = self.load_memory()
 
         self._mem = a_cpu4 = self.f_mem(cpu4_mem)
 
         if self.pontin:
-            a_pontin = self.f_pontin(a_cpu4 @ self.w_cpu42pontin)
-            cpu1a = .5 * a_cpu4 @ self.w_cpu42cpu1a - .5 * a_pontin @ self.w_pontin2cpu1a - a_tb1 @ self.w_tb12cpu1a
-            cpu1b = .5 * a_cpu4 @ self.w_cpu42cpu1b - .5 * a_pontin @ self.w_pontin2cpu1b - a_tb1 @ self.w_tb12cpu1b
+            a_pontin = self.f_pontin(a_cpu4.dot(self.w_cpu42pontin))
+            cpu1a = (.5 * a_cpu4.dot(self.w_cpu42cpu1a) -
+                     .5 * a_pontin.dot(self.w_pontin2cpu1a) -
+                     a_tb1.dot(self.w_tb12cpu1a))
+            cpu1b = (.5 * a_cpu4.dot(self.w_cpu42cpu1b) -
+                     .5 * a_pontin.dot(self.w_pontin2cpu1b) -
+                     a_tb1.dot(self.w_tb12cpu1b))
         else:
-            cpu1a = (a_cpu4 @ self.w_cpu42cpu1a) * ((a_tb1 - 1.) @ self.w_tb12cpu1a)
-            cpu1b = (a_cpu4 @ self.w_cpu42cpu1b) * ((a_tb1 - 1.) @ self.w_tb12cpu1b)
+            cpu1a = a_cpu4.dot(self.w_cpu42cpu1a) * (1 - a_tb1).dot(self.w_tb12cpu1a)
+            cpu1b = a_cpu4.dot(self.w_cpu42cpu1b) * (1 - a_tb1).dot(self.w_tb12cpu1b)
 
         self._ste = a_cpu1 = self.f_cpu1(np.hstack([cpu1b[-1], cpu1a, cpu1b[0]]))
 
         return a_cpu1
 
+    def load_memory(self):
+        return self.__cpu4
+
+    def update_memory(self, mem):
+        self.__cpu4 = mem
+
     def __repr__(self):
         return "StoneCX(TB1=%d, TN1=%d, TN2=%d, CL1=%d, TL2=%d, CPU4=%d, CPU1=%d)" % (
             self.nb_tb1, self.nb_tn1, self.nb_tn2, self.nb_cl1, self.nb_tl2, self.nb_cpu4, self.nb_cpu1
         )
+
+    def reset_integrator(self):
+        self.__cpu4[:] = .5
 
     def get_flow(self, heading, velocity, filter_steps=0):
         """
@@ -254,18 +303,18 @@ class StoneCX(CentralComplexBase):
         ----------
         heading: float
             the heading direction in radians.
-        velocity: np.ndarray
+        velocity: np.ndarray[float]
             the 2D linear velocity.
         filter_steps: int, optional
             the number of steps as a smoothing parameter for the filter
 
         Returns
         -------
-        flow: np.ndarray
+        flow: np.ndarray[float]
             the estimated optic flow from both eyes [L, R]
         """
         A = tn_axes(heading, self.tn_prefs)
-        flow = velocity.dot(A)
+        flow = A.T.dot(velocity)
 
         # If we are low-pass filtering speed signals (fading memory)
         if filter_steps > 0:
@@ -321,7 +370,26 @@ class StoneCX(CentralComplexBase):
         r_tn2: np.ndarray
             the responses of the TN2 neurons
         """
-        return np.clip(flow, 0, 1)
+        return np.clip(flow + self.rng.normal(scale=self._noise, size=flow.shape), 0, 1)
+
+    def decode_vector(self):
+        """
+        Transforms the CPU4 vector memory to a vector in the Cartesian coordinate system.
+
+        Returns
+        -------
+        complex
+        """
+        vec_reshaped = self.__cpu4.reshape((2, -1))
+        vec_shifted = np.array([np.roll(vec_reshaped[0], 1, axis=-1),
+                                np.roll(vec_reshaped[1], -1, axis=-1)])
+        signal = np.sum(vec_shifted, axis=0)
+
+        fund_freq = np.fft.fft(signal)[1]
+        angle = -np.angle(np.conj(fund_freq))
+        distance = np.absolute(fund_freq) / self._gain
+
+        return distance * np.exp(1j * angle)
 
     @property
     def w_tl22cl1(self):
