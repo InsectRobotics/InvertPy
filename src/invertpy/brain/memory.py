@@ -55,7 +55,9 @@ class MemoryComponent(Component, ABC):
         self._hid = np.zeros((self.neuron_dims, self.nb_hidden), dtype=self.dtype)
 
         self._novelty_name = ["", "pca", "zca", "zernike-zca", "zernike"]
-        self._novelty_mode = np.clip(novelty_mode, 0, len(self._novelty_name))
+        if isinstance(novelty_mode, str):
+            novelty_mode = self._novelty_name.index(novelty_mode)
+        self._novelty_mode = np.clip(novelty_mode, 0, len(self._novelty_name) - 1)
 
     def reset(self):
         """
@@ -413,7 +415,7 @@ class Infomax(MemoryComponent):
                          repeat_rate=learning_rate, *args, **kwargs)
 
         self._w_i2h = random_synapses(nb_input, self.nb_hidden, w_min=-.5, w_max=.5, dtype=self.dtype, rng=self.rng)
-        self._w_h2o = uniform_synapses(self.nb_hidden, self.nb_output, fill_value=1, dtype=self.dtype)
+        self._w_h2o = uniform_synapses(self.nb_hidden, self.nb_output, fill_value=1. / self.nb_hidden, dtype=self.dtype)
 
         self.params.extend([self._w_i2h, self._w_h2o])
 
@@ -529,10 +531,15 @@ class PerfectMemory(MemoryComponent):
 
         if self._write > 0:
             y_true = self.database[:self._write].T
-            y_pred = np.array([a_inp] * self._write).T
+            y_pred = np.vstack([a_inp] * self._write).T
             a_out = self._error_metric(y_true, y_pred, multioutput='raw_values', squared=False).min()
         else:
             a_out = np.zeros(self.nb_output, dtype=self.dtype)
+
+        if np.ndim(a_out) < 1:
+            a_out = np.array([a_out])
+        if np.ndim(a_out) < 2:
+            a_out = a_out[np.newaxis, ...]
 
         self._inp = a_inp
         self._out = a_out
