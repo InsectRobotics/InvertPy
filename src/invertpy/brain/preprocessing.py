@@ -54,6 +54,104 @@ class Preprocessing(Component, ABC):
         return self._nb_output
 
 
+class LateralInhibition(Preprocessing):
+
+    def __init__(self, ori, nb_neighbours=6, degrees=True, *args, **kwargs):
+        """
+        A preprocessing component that computes the edges of the input spherical 'image' using lateral inhibition.
+
+        In lateral inhibition, each output neuron is excited by its respective ommatidium and inhibited by its
+        neightbours.
+
+        Parameters
+        ----------
+        ori : Rotation
+            the relative orientation of the ommatidia of interest
+        nb_neighbours : int
+            the number of neighbours to be inhibited from. Default is 6
+        degrees : bool
+            defines if the input and output angles will be in degrees or not. Default is False
+        """
+        kwargs.setdefault("nb_input", np.shape(ori)[0])
+        kwargs.setdefault("nb_output", np.shape(ori)[0])
+        super().__init__(*args, **kwargs)
+
+        self._xyz = ori.apply([1, 0, 0])
+        self._xyz = self._xyz / np.linalg.norm(self._xyz, axis=-1)[:, np.newaxis]
+
+        self._nb_neighbours = nb_neighbours
+
+        self._w = np.zeros((self._nb_input, self._nb_output), dtype=self.dtype)
+
+        self._f_li = lambda x: np.clip(x, 0, 1)
+
+        self.reset()
+
+    def reset(self, *args):
+        """
+        Resets the ZM parameters.
+        """
+        c = np.clip(np.dot(self._xyz, self._xyz.T), -1, 1)
+        d = np.arccos(c)  # angular distance between vectors
+        w = np.zeros_like(self._w)
+
+        i = np.argsort(d, axis=1)[:, :self._nb_neighbours+1]
+
+        w[i[:, 0], np.arange(w.shape[1])] = float(self._nb_neighbours)
+        for j in range(self._nb_neighbours):
+            w[i[:, j + 1], np.arange(w.shape[1])] = -1
+
+        self._w = w
+
+    def _fprop(self, x):
+        """
+        Transform the input signal to its edges.
+
+        Parameters
+        ----------
+        x: np.ndarray[float]
+            the raw signal that needs to be transformed
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._f_li(x.dot(self._w))
+
+    @property
+    def w(self):
+        """
+        The transformation weights.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._w
+
+    @property
+    def centres(self):
+        """
+        The normalised 3D positions of the ommatidia.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._xyz
+
+    @property
+    def nb_neighbours(self):
+        """
+        The number of neighbours that each ommatidium is inhibited from.
+
+        Returns
+        -------
+        int
+        """
+        return self._nb_neighbours
+
+
 class Whitening(Preprocessing):
     def __init__(self, *args, samples=None, w_method=pca, **kwargs):
         """

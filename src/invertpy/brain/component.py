@@ -24,7 +24,7 @@ import warnings
 
 class Component(object):
 
-    def __init__(self, nb_input, nb_output, nb_repeats=4, repeat_rate=None, learning_rule=dopaminergic, dims=1,
+    def __init__(self, nb_input, nb_output, nb_repeats=1, repeat_rate=None, learning_rule=dopaminergic, dims=1,
                  eligibility_trace=0., noise=0., rng=RNG, dtype=np.float32):
         """
         Abstract class of a brain component that implements its basic functions and sets the abstract methods that need
@@ -173,7 +173,7 @@ class Component(object):
             v_pre = 0.
             eta = 1.
         epsilon = self.rng.uniform(-self._noise, self._noise, v.shape)
-        return eta * v + (1. - eta) * v_pre + epsilon
+        return v_pre + eta * (v - v_pre) + epsilon
 
     def update_weights(self, w_pre, r_pre, r_post, rein, w_rest=1., eta=None):
         """
