@@ -33,7 +33,7 @@ x = np.linspace(0, 2 * np.pi, N_COLUMNS, endpoint=False)
 
 class VectorMemoryCX(StoneCX):
 
-    def __init__(self, nb_rings=4, nb_mbon=2, *args, **kwargs):
+    def __init__(self, nb_vectors=4, nb_mbon=2, *args, **kwargs):
         """
         The Central Complex model of [1]_ as a component of the locust brain.
 
@@ -55,7 +55,7 @@ class VectorMemoryCX(StoneCX):
             the number of CPU1a neurons. Default is 14
         nb_cpu1b: int, optional
             the number of CPU1b neurons. Default is 2
-        nb_rings: int, optional
+        nb_vectors: int, optional
             the maximum number of PI vectors to store. Default is 4
         nb_mbon: int, optional
             the number of motivations for which vector to use. Default is 2 (homing and foraging)
@@ -78,7 +78,7 @@ class VectorMemoryCX(StoneCX):
         kwargs.setdefault('rng', RNG)
         kwargs.setdefault('dtype', np.float32)
 
-        self._nb_rings = nb_rings
+        self._nb_vecs = nb_vectors
         self._nb_mbon = nb_mbon
         nb_cpu4 = kwargs['nb_cpu4']
         noise = kwargs['noise']
@@ -86,18 +86,18 @@ class VectorMemoryCX(StoneCX):
         dtype = kwargs['dtype']
 
         # initialise the responses of the neurons
-        self._vec = np.zeros(nb_rings)
+        self._vec = np.zeros(nb_vectors)
         self._mbon = np.zeros(nb_mbon)
         self._vec_t = np.zeros_like(self._vec)
 
         # Weight matrices based on anatomy (These are not changeable!)
 
         # cpu4 memory
-        self._w_mbon2vec = uniform_synapses(nb_mbon, nb_rings, fill_value=0, dtype=dtype)
-        self._w_vec2cpu4 = uniform_synapses(nb_rings, nb_cpu4, fill_value=.5, dtype=dtype)
-        self._w_ring2cpu4 = uniform_synapses(nb_cpu4 // 2, nb_cpu4, fill_value=0, dtype=dtype)
+        self._w_mbon2vec = uniform_synapses(nb_mbon, nb_vectors, fill_value=0, dtype=dtype)
+        self._w_vec2cpu4 = uniform_synapses(nb_vectors, nb_cpu4, fill_value=.5, dtype=dtype)
 
-        self.f_vec = lambda v: hardmax(v, noise=noise + 0.01, rng=rng)
+        self.f_vec = lambda v: v
+        self.f_mbon = lambda v: hardmax(v, noise=noise + 0.01, rng=rng)
         self._multi = False
         self._c_rings = None  # the working rings
         self._c_vec = None  # the working vector
@@ -105,10 +105,12 @@ class VectorMemoryCX(StoneCX):
 
         super().__init__(*args, **kwargs)
 
+        self._vec_slope = 5.
+        self._b_vec = 2.5
+
         self.params.extend([
             self._w_mbon2vec,
-            self._w_vec2cpu4,
-            self._w_ring2cpu4
+            self._w_vec2cpu4
         ])
 
     def reset(self):
@@ -116,15 +118,11 @@ class VectorMemoryCX(StoneCX):
 
         self.w_mbon2vec = np.zeros_like(self._w_mbon2vec)
         self.w_mbon2vec[0, 0] = 1
-        self.w_mbon2vec[1:, 1:] = diagonal_synapses(self._nb_mbon - 1, self.nb_rings - 1, fill_value=1.,
+        self.w_mbon2vec[1:, 1:] = diagonal_synapses(self._nb_mbon - 1, self.nb_vectors - 1, fill_value=1.,
                                                     tile=True, dtype=self.dtype)
-        self.w_vec2cpu4 = uniform_synapses(self.nb_rings, self.nb_cpu4, fill_value=.5, dtype=self.dtype)
-        self.w_ring2cpu4 = pattern_synapses(
-            pattern=diagonal_synapses(self.nb_cpu4 // 2, self.nb_cpu4 // 2, fill_value=1, dtype=self.dtype),
-            patch=np.array([1, 1], dtype=self.dtype), dtype=self.dtype)
+        self.w_vec2cpu4 = uniform_synapses(self.nb_vectors, self.nb_cpu4, fill_value=.5, dtype=self.dtype)
 
         self._vec_t = np.zeros_like(self._vec)
-        self._c_rings = None
         self._c_vec = None
         self._v_change = False
 
@@ -158,8 +156,8 @@ class VectorMemoryCX(StoneCX):
             mbon[0] = 1.
 
         # select vector based on motivation
-        i_vec = np.argmax(mbon)
-        vec_mot = self.w_mbon2vec[i_vec]
+        a_mbon = self.f_mbon(mbon)
+        vec_mot = a_mbon.dot(self.w_mbon2vec)
         # select most recent vector
         # vec_tim = np.exp(-self._vec_t)
         vec_tim = 1.
@@ -169,7 +167,6 @@ class VectorMemoryCX(StoneCX):
         # weight more the closest vector
         self._c_vec = a_vec = self.f_vec(vec_mot * vec_tim * vec_dis)
         # print(f"vec: {a_vec}, mot: {vec_mot}, time: {vec_tim}, dist: {vec_dis}, all: {vec_mot * vec_tim * vec_dis}")
-        self._c_rings = visual_rings
         print(f"MBON: {np.array2string(mbon, precision=2)}, "
               f"VEC: {np.array2string(vec_mot, precision=1)}, "
               f"A_VEC: {np.array2string(a_vec, precision=1)}, "
@@ -182,30 +179,53 @@ class VectorMemoryCX(StoneCX):
 
         return a_cpu1
 
-    def load_memory(self):
-        cpu4_mem = super().load_memory()
+    def update_memory(self, tb1=None, tn1=None, tn2=None):
+        a_cpu4 = super().update_memory(tb1=tb1, tn1=tn1, tn2=tn2)
+
+        if self.update:
+            if self._c_vec is not None:
+                # check if the vector has changed
+                self._v_change = np.argmax(self._vec) != np.argmax(self._c_vec)
+
+                # reset the memory when the motivation changes
+                if self._v_change:
+                    self.reset_current_memory()
+                    self._vec_t[np.argmax(self._vec)] += 1
+
+        return a_cpu4
+
+    def update_steering(self, cpu4=None, tb1=None):
+        if cpu4 is None:
+            cpu4 = self._mem
         vec_mem = 0.
-        visual = 0.
         if self._c_vec is not None:
-            vec_mem = np.dot(self._c_vec, self.w_vec2cpu4 - 0.5)
+            vec_mem = 0.5 - self.f_mem(self._c_vec.dot(self.w_vec2cpu4))
 
-            if self._c_rings is not None:
-                # integrate the visual rings gated by the active vector
-                visual = self._c_vec * np.dot(self._c_rings, self.w_ring2cpu4)
+        return super().update_steering(cpu4=cpu4 + vec_mem, tb1=tb1)
 
-        return cpu4_mem + vec_mem + visual
-
-    def update_memory(self, mem):
-        super().update_memory(mem)
-
-        if self._c_vec is not None:
-            # check if the vector has changed
-            self._v_change = np.argmax(self._vec) != np.argmax(self._c_vec)
-
-            # reset the memory when the motivation changes
-            if self._v_change:
-                self.reset_current_memory()
-                self._vec_t[np.argmax(self._vec)] += 1
+    # def load_memory(self):
+    #     vec_mem = 0.
+    #     visual = 0.
+    #     if self._c_vec is not None:
+    #         vec_mem = np.dot(self._c_vec, self.w_vec2cpu4 - 0.5)
+    #
+    #         if self._c_rings is not None:
+    #             # integrate the visual rings gated by the active vector
+    #             visual = self._c_vec * np.dot(self._c_rings, self.w_ring2cpu4)
+    #
+    #     return self.f_vec(super().load_memory()) + vec_mem + visual
+    #
+    # def update_memory(self, mem):
+    #     super().update_memory(mem)
+    #
+    #     if self._c_vec is not None:
+    #         # check if the vector has changed
+    #         self._v_change = np.argmax(self._vec) != np.argmax(self._c_vec)
+    #
+    #         # reset the memory when the motivation changes
+    #         if self._v_change:
+    #             self.reset_current_memory()
+    #             self._vec_t[np.argmax(self._vec)] += 1
 
     def reset_current_memory(self):
         max_v = np.argmax(self._vec)
@@ -214,9 +234,9 @@ class VectorMemoryCX(StoneCX):
             self.w_vec2cpu4[max_v] = 0.5
         elif max_v > 0:  # use single integrator
             print(f"STORE VECTOR AT VEC_{max_v+1}!")
-            self.w_vec2cpu4[max_v] = 1. - super().load_memory()
+            self.w_vec2cpu4[max_v] = self.cpu4_mem
             if max_v == 0:
-                super().update_memory(np.full_like(super().load_memory(), 0.5))
+                self.reset_integrator()
 
     def get_vectors_distance(self):
         if self._multi:  # use multiple integrators
@@ -238,7 +258,8 @@ class VectorMemoryCX(StoneCX):
     def __repr__(self):
         return f"VectorMemoryCX(TB1={self.nb_tb1:d}, TN1={self.nb_tn1:d}, TN2={self.nb_tn2:d}," \
                f" CL1={self.nb_cl1:d}, TL2={self.nb_tl2}, CPU4={self.nb_cpu4:d}," \
-               f" MBON={self.nb_mbon:d}, vectors={self.nb_rings:d}, CPU1={self.nb_cpu1:d})"
+               f" MBON={self.nb_mbon:d}, vectors={self.nb_vectors:d}, CPU1={self.nb_cpu1:d}" \
+               f"{', Pontine=True' if self.pontine else ''}{', holonomic=True' if self.holonomic else ''})"
 
     @property
     def v_change(self):
@@ -275,22 +296,7 @@ class VectorMemoryCX(StoneCX):
         self._w_vec2cpu4[:] = v[:]
 
     @property
-    def w_ring2cpu4(self):
-        """
-        The visual familiarity ring to CPU4 synaptic weights.
-
-        Returns
-        -------
-        np.ndarray[float]
-        """
-        return self._w_ring2cpu4
-
-    @w_ring2cpu4.setter
-    def w_ring2cpu4(self, v):
-        self._w_ring2cpu4[:] = v[:]
-
-    @property
-    def nb_rings(self):
+    def nb_vectors(self):
         """
         The number of visual familiarity rings.
 
@@ -298,7 +304,7 @@ class VectorMemoryCX(StoneCX):
         -------
         int
         """
-        return self._nb_rings
+        return self._nb_vecs
 
     @property
     def nb_mbon(self):

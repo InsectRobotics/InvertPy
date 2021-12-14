@@ -227,9 +227,9 @@ def winner_takes_all(x, tau=None, percentage=.05, cmin=0., cmax=1., noise=0., rn
 
 def hardmax(x, cmin=0., cmax=1., noise=0., rng=RNG, axis=None):
     y = x + _get_noise(noise, rng=rng, size=_get_size(x))
-    y = np.asarray(np.equal(y, y.max(axis=axis)), dtype=x.dtype)
+    y = np.eye(y.shape[-1], dtype=x.dtype)[np.argmax(y, axis=axis)]
 
-    return np.clip(y / np.sum(y, axis=axis), cmin, cmax)
+    return np.clip(y, cmin, cmax)
 
 
 def _get_noise(eta, size=None, rng=RNG):

@@ -34,7 +34,7 @@ x = np.linspace(0, 2 * np.pi, N_COLUMNS, endpoint=False)
 class StoneCX(CentralComplexBase):
 
     def __init__(self, nb_tb1=8, nb_tn1=2, nb_tn2=2, nb_cl1=16, nb_tl2=16, nb_cpu4=16, nb_cpu1a=14, nb_cpu1b=2,
-                 tn_prefs=np.pi/4, gain=0.05, pontin=False, *args, **kwargs):
+                 tn_prefs=np.pi/4, gain=0.05, holonomic=True, pontine=True, *args, **kwargs):
         """
         The Central Complex model of [1]_ as a component of the locust brain.
 
@@ -60,8 +60,10 @@ class StoneCX(CentralComplexBase):
             the angular offset of preference of the TN neurons from the front direction.
         gain: float, optional
             the gain if used as charging speed for the memory.
-        pontin: bool, optional
-            whether to include a pontin neuron in the circuit or not. Default is False.
+        pontine: bool, optional
+            whether to include the Pontine neurons in the circuit or not. Default is True.
+        holonomic : bool, optional
+            whether to use the holonomic version of the circuit or not. Default is True.
 
         Notes
         -----
@@ -77,14 +79,15 @@ class StoneCX(CentralComplexBase):
         super().__init__(*args, **kwargs)
 
         # set-up the learning speed
-        if pontin:
-            gain *= 5e-03
+        if pontine:
+            gain *= 5e-01
         self._gain = gain
 
         # set-up parameters
         self.tn_prefs = tn_prefs
         self.smoothed_flow = 0.
-        self.pontin = pontin
+        self._pontine = pontine
+        self._holonomic = holonomic
 
         self._nb_tl2 = nb_tl2
         self._nb_cl1 = nb_cl1
@@ -105,32 +108,32 @@ class StoneCX(CentralComplexBase):
         self._w_cl12tb1 = uniform_synapses(self.nb_cl1, self.nb_tb1, fill_value=0, dtype=self.dtype)
         self._w_tn22cpu4 = uniform_synapses(self.nb_tn2, self.nb_cpu4, fill_value=0, dtype=self.dtype)
 
-        self._w_pontin2cpu1a = uniform_synapses(self.nb_cpu1, self.nb_cpu1a, fill_value=0, dtype=self.dtype)
-        self._w_pontin2cpu1b = uniform_synapses(self.nb_cpu1, self.nb_cpu1b, fill_value=0, dtype=self.dtype)
-        self._w_cpu42pontin = uniform_synapses(self.nb_cpu4, self.nb_cpu4, fill_value=0, dtype=self.dtype)
+        self._w_pontine2cpu1a = uniform_synapses(self.nb_cpu1, self.nb_cpu1a, fill_value=0, dtype=self.dtype)
+        self._w_pontine2cpu1b = uniform_synapses(self.nb_cpu1, self.nb_cpu1b, fill_value=0, dtype=self.dtype)
+        self._w_cpu42pontine = uniform_synapses(self.nb_cpu4, self.nb_cpu4, fill_value=0, dtype=self.dtype)
 
         # The cell properties (for sigmoid function)
         self._tl2_slope = 6.8
         self._cl1_slope = 3.0
         self._tb1_slope = 5.0
-        self._cpu4_slope = 5.0
-        self._cpu1_slope = 5.0  # 7.5
+        self._ste_slope = 7.5 if pontine else 5.0
         self._motor_slope = 1.0
-        self._pontin_slope = 5.0
+        self._pontine_slope = 5.0
 
         self._b_tl2 = 3.0
         self._b_cl1 = -0.5
-        self._b_pontin = 2.5
+        self._b_ste = -1.0 if pontine else 2.5
+        self._b_pontine = 2.5
 
         self.params.extend([
             self._w_tl22cl1,
             self._w_cl12tb1,
-            self._w_cpu42pontin,
-            self._w_pontin2cpu1a,
-            self._w_pontin2cpu1b,
+            self._w_cpu42pontine,
+            self._w_pontine2cpu1a,
+            self._w_pontine2cpu1b,
             self._b_tl2,
             self._b_cl1,
-            self._b_pontin
+            self._b_pontine
         ])
 
         self.tl2_prefs = np.tile(np.linspace(0, 2 * np.pi, self.nb_tb1, endpoint=False), 2)
@@ -139,9 +142,8 @@ class StoneCX(CentralComplexBase):
         self.f_tl2 = lambda v: sigmoid(v * self._tl2_slope - self.b_tl2, noise=self._noise, rng=self.rng)
         self.f_cl1 = lambda v: sigmoid(v * self._cl1_slope - self.b_cl1, noise=self._noise, rng=self.rng)
         self.f_tb1 = lambda v: sigmoid(v * self._tb1_slope - self.b_tb1, noise=self._noise, rng=self.rng)
-        self.f_cpu4 = lambda v: sigmoid(v * self._cpu4_slope - self.b_cpu4, noise=self._noise, rng=self.rng)
-        self.f_pontin = lambda v: sigmoid(v * self._pontin_slope - self.b_pontin, noise=self._noise, rng=self.rng)
-        self.f_cpu1 = lambda v: sigmoid(v * self._cpu1_slope - self.b_cpu1, noise=self._noise, rng=self.rng)
+        self.f_pontine = lambda v: sigmoid(v * self._pontine_slope - self.b_pontine, noise=self._noise, rng=self.rng)
+        self.f_cpu1 = lambda v: sigmoid(v * self._ste_slope - self.b_cpu1, noise=self._noise, rng=self.rng)
 
         self.reset()
 
@@ -149,11 +151,11 @@ class StoneCX(CentralComplexBase):
         # Weight matrices based on anatomy (These are not changeable!)
         self.w_tl22cl1 = diagonal_synapses(self.nb_tl2, self.nb_cl1, fill_value=-1, dtype=self.dtype)
         self.w_cl12tb1 = diagonal_synapses(self.nb_cl1, self.nb_tb1, fill_value=1, tile=True, dtype=self.dtype)
-        self.w_tb12tb1 = sinusoidal_synapses(self.nb_tb1, self.nb_tb1, fill_value=1, dtype=self.dtype)
-        self.w_tb12cpu4 = diagonal_synapses(self.nb_tb1, self.nb_cpu4, fill_value=1, tile=True, dtype=self.dtype)
+        self.w_tb12tb1 = sinusoidal_synapses(self.nb_tb1, self.nb_tb1, fill_value=-1, dtype=self.dtype)
+        self.w_tb12cpu4 = diagonal_synapses(self.nb_tb1, self.nb_cpu4, fill_value=-1, tile=True, dtype=self.dtype)
         self.w_tn22cpu4 = chessboard_synapses(self.nb_tn2, self.nb_cpu4, nb_rows=2, nb_cols=2, fill_value=1,
                                               dtype=self.dtype)
-        w_tb12cpu1 = diagonal_synapses(self.nb_tb1, self.nb_cpu1, fill_value=1, tile=True)
+        w_tb12cpu1 = diagonal_synapses(self.nb_tb1, self.nb_cpu1, fill_value=-1, tile=True)
         self.w_tb12cpu1a = w_tb12cpu1[:, 1:-1]
         self.w_tb12cpu1b = np.hstack([w_tb12cpu1[:, -1:], w_tb12cpu1[:, :1]])
 
@@ -165,14 +167,14 @@ class StoneCX(CentralComplexBase):
         self.w_cpu1b2motor = 1 - chessboard_synapses(self.nb_cpu1b, 2, nb_rows=2, nb_cols=2, fill_value=1,
                                                      dtype=self.dtype)
 
-        w_pontin2cpu1 = pattern_synapses(pattern=diagonal_synapses(4, 4, 1, dtype=self.dtype)[:, ::-1],
+        w_pontine2cpu1 = pattern_synapses(pattern=diagonal_synapses(4, 4, 1, dtype=self.dtype)[:, ::-1],
                                          patch=diagonal_synapses(self.nb_cpu1//4, self.nb_cpu1//4, 1, dtype=self.dtype),
-                                         dtype=self.dtype)
+                                         dtype=self.dtype) * (-1.)
 
-        self.w_pontin2cpu1a = np.hstack([w_pontin2cpu1[:, :self.nb_cpu1a//2], w_pontin2cpu1[:, -self.nb_cpu1a//2:]])
-        self.w_pontin2cpu1b = w_pontin2cpu1[:, [-self.nb_cpu1a // 2 - 1, self.nb_cpu1a // 2]]
+        self.w_pontine2cpu1a = np.hstack([w_pontine2cpu1[:, :self.nb_cpu1a // 2], w_pontine2cpu1[:, -self.nb_cpu1a // 2:]])
+        self.w_pontine2cpu1b = w_pontine2cpu1[:, [-self.nb_cpu1a // 2 - 1, self.nb_cpu1a // 2]]
 
-        self.w_cpu42pontin = diagonal_synapses(self.nb_cpu4, self.nb_cpu4, fill_value=1, dtype=self.dtype)
+        self.w_cpu42pontine = diagonal_synapses(self.nb_cpu4, self.nb_cpu4, fill_value=1, dtype=self.dtype)
 
         self.r_tl2 = np.zeros(self.nb_tl2)
         self.r_cl1 = np.zeros(self.nb_cl1)
@@ -182,7 +184,7 @@ class StoneCX(CentralComplexBase):
         self.r_cpu4 = np.zeros(self.nb_cpu4)  # cpu4 output
         self.r_cpu1 = np.zeros(self.nb_cpu1)
         self.__cpu4 = .5 * np.ones(self.nb_cpu4)  # cpu4 memory
-
+        #
         # import matplotlib.pyplot as plt
         #
         # plt.figure(1, figsize=(4, 4))
@@ -215,82 +217,107 @@ class StoneCX(CentralComplexBase):
         # plt.figure(10, figsize=(4, 4))
         # plt.imshow(self.w_cpu1b2motor, cmap="coolwarm", vmin=-1, vmax=1)
         #
+        # plt.figure(11, figsize=(4, 4))
+        # plt.imshow(self.w_pontine2cpu1a, cmap="coolwarm", vmin=-1, vmax=1)
+        #
+        # plt.figure(12, figsize=(4, 4))
+        # plt.imshow(self.w_pontine2cpu1b, cmap="coolwarm", vmin=-1, vmax=1)
+        #
         # plt.show()
 
         self.update = True
 
     def _fprop(self, phi, flow, tl2=None, cl1=None):
+
+        self._tl2, self._cl1, self._com = self.update_compass(phi, tl2=tl2, cl1=cl1)
+        self._tn1 = self.flow2tn1(flow)
+        self._tn2 = self.flow2tn2(flow)
+
+        self._mem = self.update_memory()
+
+        self._ste = a_cpu1 = self.update_steering()
+
+        return a_cpu1
+
+    def update_compass(self, phi, tl2=None, cl1=None):
         if isinstance(phi, np.ndarray) and phi.size == 8:
             if tl2 is None:
                 tl2 = np.tile(phi, 2)
             if cl1 is None:
                 cl1 = np.tile(phi, 2)
-            self._tl2 = a_tl2 = self.f_tl2(tl2[::-1])
-            self._cl1 = a_cl1 = self.f_cl1(cl1[::-1])
-            self._com = a_tb1 = self.f_com(5. * phi[::-1])
+            a_tl2 = self.f_tl2(tl2[::-1])
+            a_cl1 = self.f_cl1(cl1[::-1])
+            a_tb1 = self.f_com(5. * phi[::-1])
         else:
-            self._tl2 = a_tl2 = self.f_tl2(self.phi2tl2(phi))
-            self._cl1 = a_cl1 = self.f_cl1(a_tl2.dot(self.w_tl22cl1))
+            a_tl2 = self.f_tl2(self.phi2tl2(phi))
+            a_cl1 = self.f_cl1(a_tl2.dot(self.w_tl22cl1))
             if self._com is None:
-                self._com = a_tb1 = self.f_com(a_cl1)
+                a_tb1 = self.f_com(a_cl1)
             else:
                 p = .667  # proportion of input from CL1 to TB1
-                self._com = a_tb1 = self.f_com(p * a_cl1.dot(self.w_cl12tb1) - (1 - p) * self._com.dot(self.w_tb12tb1))
-        self._tn1 = a_tn1 = self.flow2tn1(flow)
-        self._tn2 = a_tn2 = self.flow2tn2(flow)
+                a_tb1 = self.f_com(p * a_cl1.dot(self.w_cl12tb1) + (1 - p) * self._com.dot(self.w_tb12tb1))
 
-        if self.pontin:
-            mem = .5 * self._gain * (np.clip(a_tn2.dot(self.w_tn22cpu4) - a_tb1.dot(self.w_tb12cpu4), 0, 1) - .25)
+        return a_tl2, a_cl1, a_tb1
+
+    def update_memory(self, tb1=None, tn1=None, tn2=None):
+
+        if tb1 is None:
+            tb1 = self._com
+        if tn1 is None:
+            tn1 = self._tn1
+        if tn2 is None:
+            tn2 = self._tn2
+
+        if self._pontine and not self._holonomic:
+            mem = self._gain * np.clip(tn2.dot(self.w_tn22cpu4) + tb1.dot(self.w_tb12cpu4), 0, 1)
+            cpu4_mem = self.__cpu4 + mem - 0.125 * self._gain
         else:
             # Idealised setup, where we can negate the TB1 sinusoid for memorising backwards motion
-            # update = np.clip((.5 - tn1).dot(self.w_tn2cpu4), 0., 1.)  # normal
-            mem_tn1 = np.clip((.5 - a_tn1).dot(self.w_tn22cpu4), 0., 1.)  # holonomic
-
-            mem_tb1 = self._gain * (1 - a_tb1).dot(self.w_tb12cpu4)
-            # update *= self.gain * (1. - tb1).dot(self.w_tb12cpu4)
+            mem_tn1 = (.5 - tn1).dot(self.w_tn22cpu4)
+            mem_tb1 = (tb1 - 1).dot(self.w_tb12cpu4)
 
             # Both CPU4 waves must have same average
             # If we don't normalise get drift and weird steering
-            mem_tn2 = self._gain * .25 * a_tn2.dot(self.w_tn22cpu4)
+            mem_tn2 = 0.25 * tn2.dot(self.w_tn22cpu4)
 
             mem = mem_tn1 * mem_tb1 - mem_tn2
 
-        # Constant purely to visualise same as rate-based model
-        cpu4_mem = np.clip(self.__cpu4 + mem, 0., 1.)
+            cpu4_mem = self.__cpu4 + self._gain * mem
+        cpu4_mem = np.clip(cpu4_mem, 0., 1.)
 
         if self.update:
-            self.update_memory(cpu4_mem)
+            self.__cpu4 = cpu4_mem
 
-        cpu4_mem = self.load_memory()
+        a_cpu4 = self.f_mem(cpu4_mem)
 
-        self._mem = a_cpu4 = self.f_mem(cpu4_mem)
+        return a_cpu4
 
-        if self.pontin:
-            a_pontin = self.f_pontin(a_cpu4.dot(self.w_cpu42pontin))
-            cpu1a = (.5 * a_cpu4.dot(self.w_cpu42cpu1a) -
-                     .5 * a_pontin.dot(self.w_pontin2cpu1a) -
-                     a_tb1.dot(self.w_tb12cpu1a))
-            cpu1b = (.5 * a_cpu4.dot(self.w_cpu42cpu1b) -
-                     .5 * a_pontin.dot(self.w_pontin2cpu1b) -
-                     a_tb1.dot(self.w_tb12cpu1b))
+    def update_steering(self, cpu4=None, tb1=None):
+        if cpu4 is None:
+            cpu4 = self._mem
+        if tb1 is None:
+            tb1 = self._com
+
+        if self.pontine:
+            a_pontine = self.f_pontine(cpu4.dot(self.w_cpu42pontine))
+            cpu1a = (.5 * cpu4.dot(self.w_cpu42cpu1a) +
+                     .5 * a_pontine.dot(self.w_pontine2cpu1a) +
+                     tb1.dot(self.w_tb12cpu1a))
+            cpu1b = (.5 * cpu4.dot(self.w_cpu42cpu1b) +
+                     .5 * a_pontine.dot(self.w_pontine2cpu1b) +
+                     tb1.dot(self.w_tb12cpu1b))
         else:
-            cpu1a = a_cpu4.dot(self.w_cpu42cpu1a) * (1 - a_tb1).dot(self.w_tb12cpu1a)
-            cpu1b = a_cpu4.dot(self.w_cpu42cpu1b) * (1 - a_tb1).dot(self.w_tb12cpu1b)
+            cpu1a = cpu4.dot(self.w_cpu42cpu1a) + tb1.dot(self.w_tb12cpu1a)
+            cpu1b = cpu4.dot(self.w_cpu42cpu1b) + tb1.dot(self.w_tb12cpu1b)
 
-        self._ste = a_cpu1 = self.f_cpu1(np.hstack([cpu1b[-1], cpu1a, cpu1b[0]]))
+        a_cpu1 = self.f_cpu1(np.hstack([cpu1b[-1], cpu1a, cpu1b[0]]))
 
         return a_cpu1
 
-    def load_memory(self):
-        return self.__cpu4
-
-    def update_memory(self, mem):
-        self.__cpu4 = mem
-
     def __repr__(self):
-        return "StoneCX(TB1=%d, TN1=%d, TN2=%d, CL1=%d, TL2=%d, CPU4=%d, CPU1=%d)" % (
-            self.nb_tb1, self.nb_tn1, self.nb_tn2, self.nb_cl1, self.nb_tl2, self.nb_cpu4, self.nb_cpu1
-        )
+        return f"StoneCX(TB1={self.nb_tb1:d}, TN1={self.nb_tn1:d}, TN2={self.nb_tn2:d}," \
+               f"CL1={self.nb_cl1:d}, TL2={self.nb_tl2:d}, CPU4={self.nb_cpu4:d}, CPU1={self.nb_cpu1:d}" \
+               f"{', Pontine=True' if self.pontine else ''}{', holonomic=True' if self.holonomic else ''})"
 
     def reset_integrator(self):
         self.__cpu4[:] = .5
@@ -517,37 +544,37 @@ class StoneCX(CentralComplexBase):
         self.w_s2o[[-self.nb_cpu1a//2-1, self.nb_cpu1a//2], :] = v[:]
 
     @property
-    def w_pontin2cpu1a(self):
+    def w_pontine2cpu1a(self):
         """
-        The pontin to CPU1a synaptic weights.
+        The Pontine to CPU1a synaptic weights.
         """
-        return self._w_pontin2cpu1a
+        return self._w_pontine2cpu1a
 
-    @w_pontin2cpu1a.setter
-    def w_pontin2cpu1a(self, v):
-        self._w_pontin2cpu1a[:] = v[:]
-
-    @property
-    def w_pontin2cpu1b(self):
-        """
-        The pontin to CPU1b synaptic weights.
-        """
-        return self._w_pontin2cpu1b
-
-    @w_pontin2cpu1b.setter
-    def w_pontin2cpu1b(self, v):
-        self._w_pontin2cpu1b[:] = v[:]
+    @w_pontine2cpu1a.setter
+    def w_pontine2cpu1a(self, v):
+        self._w_pontine2cpu1a[:] = v[:]
 
     @property
-    def w_cpu42pontin(self):
+    def w_pontine2cpu1b(self):
         """
-        The CPU4 to pontin synaptic weights.
+        The Pontine to CPU1b synaptic weights.
         """
-        return self._w_cpu42pontin
+        return self._w_pontine2cpu1b
 
-    @w_cpu42pontin.setter
-    def w_cpu42pontin(self, v):
-        self._w_cpu42pontin[:] = v[:]
+    @w_pontine2cpu1b.setter
+    def w_pontine2cpu1b(self, v):
+        self._w_pontine2cpu1b[:] = v[:]
+
+    @property
+    def w_cpu42pontine(self):
+        """
+        The CPU4 to Pontine synaptic weights.
+        """
+        return self._w_cpu42pontine
+
+    @w_cpu42pontine.setter
+    def w_cpu42pontine(self, v):
+        self._w_cpu42pontine[:] = v[:]
 
     @property
     def b_tl2(self):
@@ -592,11 +619,11 @@ class StoneCX(CentralComplexBase):
         return self._b_out
 
     @property
-    def b_pontin(self):
+    def b_pontine(self):
         """
-        The pontin rest response rate (bias).
+        The Pontine rest response rate (bias).
         """
-        return self._b_pontin
+        return self._b_pontine
 
     @property
     def r_tb1(self):
@@ -744,3 +771,25 @@ class StoneCX(CentralComplexBase):
         The number CPU1 neurons.
         """
         return self._nb_steering
+
+    @property
+    def pontine(self):
+        """
+        Whether the Pontine neurons are included in the circuit.
+
+        Returns
+        -------
+        bool
+        """
+        return self._pontine
+
+    @property
+    def holonomic(self):
+        """
+        Whether the holonomic version of the circuit is used.
+
+        Returns
+        -------
+        bool
+        """
+        return self._holonomic

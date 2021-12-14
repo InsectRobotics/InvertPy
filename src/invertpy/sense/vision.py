@@ -176,7 +176,7 @@ class CompoundEye(Sensor):
             # # the brightness of the environment can be calculated given the sun position
             # br = np.clip(np.sin(sky.theta_s), 0.1, 1)
             # get the sky contribution
-            y[:], p[:], a[:] = sky(omm_ori_glob, irgbu=w_c, noise=self.noise)
+            y[:], p[:], a[:] = sky(omm_ori_glob, irgbu=w_c, noise=self.noise, rng=self.rng)
 
         if scene is not None:
             # get the global positions of the ommatidia

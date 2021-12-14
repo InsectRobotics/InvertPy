@@ -56,7 +56,7 @@ class Preprocessing(Component, ABC):
 
 class LateralInhibition(Preprocessing):
 
-    def __init__(self, ori, nb_neighbours=6, degrees=True, *args, **kwargs):
+    def __init__(self, ori, nb_neighbours=6, *args, **kwargs):
         """
         A preprocessing component that computes the edges of the input spherical 'image' using lateral inhibition.
 
@@ -69,8 +69,6 @@ class LateralInhibition(Preprocessing):
             the relative orientation of the ommatidia of interest
         nb_neighbours : int
             the number of neighbours to be inhibited from. Default is 6
-        degrees : bool
-            defines if the input and output angles will be in degrees or not. Default is False
         """
         kwargs.setdefault("nb_input", np.shape(ori)[0])
         kwargs.setdefault("nb_output", np.shape(ori)[0])
@@ -100,6 +98,14 @@ class LateralInhibition(Preprocessing):
         w[i[:, 0], np.arange(w.shape[1])] = float(self._nb_neighbours)
         for j in range(self._nb_neighbours):
             w[i[:, j + 1], np.arange(w.shape[1])] = -1
+
+        # # the synaptic weights could be calculated using the second derivative of the Gaussian function
+        # # (Ricker or Mexican hat wavelet)
+        # r = 2 * d[~np.isclose(d, 0)].min()
+        # z = 2 / np.sqrt(3 * r) * np.power(np.pi, 1 / 4)
+        # w = z * (1 - np.square(d / r)) * np.exp(-np.square(d) / (2 * np.square(r)))
+        # w[w > 0] *= 10 * (-w[w < 0]).sum(axis=1) / w[w > 0].sum(axis=1)
+        # w[w < 0] *= 10 * (-w[w > 0]).sum(axis=1) / w[w < 0].sum(axis=1)
 
         self._w = w
 
