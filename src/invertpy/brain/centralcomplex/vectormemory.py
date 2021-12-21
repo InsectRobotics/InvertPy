@@ -169,7 +169,6 @@ class VectorMemoryCX(StoneCX):
         # print(f"vec: {a_vec}, mot: {vec_mot}, time: {vec_tim}, dist: {vec_dis}, all: {vec_mot * vec_tim * vec_dis}")
         print(f"MBON: {np.array2string(mbon, precision=2)}, "
               f"VEC: {np.array2string(vec_mot, precision=1)}, "
-              f"A_VEC: {np.array2string(a_vec, precision=1)}, "
               f"MEM2VEC: {np.absolute(self.mem2vector())}")
 
         a_cpu1 = super()._fprop(phi, flow, tl2=tl2, cl1=cl1)
@@ -181,6 +180,11 @@ class VectorMemoryCX(StoneCX):
 
     def update_memory(self, tb1=None, tn1=None, tn2=None):
         a_cpu4 = super().update_memory(tb1=tb1, tn1=tn1, tn2=tn2)
+
+        # vec_mem = 0.
+        # if self._c_vec is not None:
+        #     vec_mem = 0.5 - self.f_mem(self._c_vec.dot(self.w_vec2cpu4))
+        # a_cpu4 = self.f_mem(self.cpu4_mem + vec_mem)
 
         if self.update:
             if self._c_vec is not None:
