@@ -17,6 +17,8 @@ __license__ = "MIT"
 __version__ = "v1.0.0-alpha"
 __maintainer__ = "Evripidis Gkanias"
 
+import scipy.stats
+
 from .component import Component
 from .synapses import uniform_synapses, sparse_synapses, random_synapses
 from .activation import relu, sigmoid, winner_takes_all
@@ -247,7 +249,10 @@ class WillshawNetwork(MemoryComponent):
         super().__init__(nb_input=nb_input, nb_output=nb_output, learning_rule=learning_rule,
                          eligibility_trace=eligibility_trace, *args, **kwargs)
 
-        self._w_i2s, self._b_s = uniform_synapses(nb_input, nb_sparse, dtype=self.dtype, bias=0.)
+        # nb_in_max = nb_sparse // nb_input + 6
+        max_samples = max(nb_sparse, 10000)
+        # max_repeat = int(np.round(nb_sparse / nb_input / 20))
+        self._w_i2s, self._b_s = sparse_synapses(nb_input, nb_sparse, max_samples=max_samples, dtype=self.dtype, bias=0.)
         self._w_s2o, self._b_o = uniform_synapses(nb_sparse, nb_output, dtype=self.dtype, bias=0.)
         self._w_rest = 1.
 
@@ -278,9 +283,6 @@ class WillshawNetwork(MemoryComponent):
         """
         Resets the synaptic weights and internal responses.
         """
-        nb_in_max = self.nb_sparse // self.nb_input + 6
-        self.w_i2s = sparse_synapses(self.nb_input, self.nb_sparse, nb_in_min=1, nb_in_max=nb_in_max, dtype=self.dtype)
-        # self.w_i2s *= self.nb_input / self._w_i2s.sum(axis=1)[:, np.newaxis]
         self.w_s2o = uniform_synapses(self.nb_sparse, self.nb_output, fill_value=1, dtype=self.dtype)
 
         super().reset()

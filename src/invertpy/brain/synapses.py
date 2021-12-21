@@ -11,11 +11,14 @@ __license__ = "MIT"
 __version__ = "v1.0.0-alpha"
 __maintainer__ = "Evripidis Gkanias"
 
+import sys
+
 import scipy.signal
 
-from ._helpers import RNG, pca, whitening
+from ._helpers import RNG, pca, whitening, eps
 from .activation import softmax
 
+from scipy.special import comb
 from scipy.spatial.transform import Rotation as R
 
 import numpy as np
@@ -144,7 +147,85 @@ def diagonal_synapses(nb_in, nb_out, fill_value=1, tile=False, dtype='float32', 
         return w, np.full(nb_out, fill_value=bias, dtype=dtype)
 
 
-def sparse_synapses(nb_in, nb_out, nb_in_min=None, nb_in_max=None, min_corr=0.2, normalise=True,
+# def sparse_synapses(nb_in, nb_out, nb_in_min=None, nb_in_max=None, max_corr=0.8, max_repeat=20, normalise=True,
+#                     dtype='float32', rng=RNG, bias=None):
+#     """
+#     Creates sparse synapses.
+#
+#     Parameters
+#     ----------
+#     nb_in: int
+#         the number of the input units.
+#     nb_out: int
+#         the number of the output units.
+#     nb_in_min: int, optional
+#         the minimum number of input neurons connected to each output neuron.
+#     nb_in_max: int, optional
+#         the maximum number of input neurons connected to each output neuron.
+#     max_corr : float, optional
+#         the maximum allowed correlation between connection patterns of the sparse code.
+#     normalise: bool, optional
+#         if the synaptic weights for each output neuron should sum to 1.
+#     dtype: np.dtype | str
+#         the type of the values for the synaptic weights.
+#     rng
+#         the random value generator.
+#     bias: float, optional
+#         the value of all the biases. If None, no bias is returned.
+#
+#     Returns
+#     -------
+#     params: np.ndarray | tuple
+#         the generated synaptic weights and the bias (if requested)
+#     """
+#     w = uniform_synapses(nb_in, nb_out * max_repeat, fill_value=0., dtype=dtype)
+#
+#     if nb_in_min is None:  # default: 6
+#         nb_in_min = max(int(nb_in * 6. / 1000.), 1)
+#     if nb_in_max is None:  # default: 14
+#         nb_in_max = max(int(nb_in * 14. / 1000.), 1)
+#
+#     max_corr = np.clip(max_corr, 0, 1)  # make sure that it is in the correct range
+#
+#     # number of input connections for each of of the output (sparse) neurons
+#     nb_out_in = np.asarray(rng.rand(nb_out * max_repeat) * (nb_in_max - nb_in_min) + nb_in_min, dtype='int32')
+#
+#     c_out_in = np.zeros(nb_out * max_repeat, dtype=int)  # accumulated output connections from input neurons
+#     duplicates = np.arange(nb_out * max_repeat)  # the indices of the duplicated PN-KC entries
+#
+#     while len(duplicates) > 0:
+#         i = rng.randint(0, nb_in - 1)
+#         w[:, duplicates] = 0.
+#         c_out_in[duplicates] = 0
+#         while c_out_in.sum() < nb_out_in.sum():
+#             ii = i
+#             j_s = duplicates[np.argsort(nb_out_in[rng.permutation(duplicates)])[::-1]]
+#             # print(np.sort(nb_out_in[duplicates]))
+#             for j in j_s:  # iterate over the different output neurons
+#
+#                 # if the number of connections for the output neuron has reached its limit
+#                 # continue to the next output neuron
+#                 if c_out_in[j] >= nb_out_in[j] or w[i, j] > 0:
+#                     continue
+#                 w[i, j] = 1. / nb_out_in[j] if normalise else 1.
+#                 i = (i + 1) % nb_in
+#                 c_out_in[j] += 1
+#             if i == ii:
+#                 i = (i + 1) % nb_in
+#
+#         c = np.dot(w.T, w) / np.outer(np.linalg.norm(w, axis=0), np.linalg.norm(w, axis=0))
+#         duplicates = np.arange(nb_out)[np.greater_equal(c - np.diag(np.diagonal(c)), max_corr).max(axis=0)]
+#         print(f"Number of duplicates: {duplicates.shape[0]}")
+#
+#     w = rng.permutation(w)
+#
+#     if bias is None:
+#         return w
+#     else:
+#         return w, np.full(nb_out, fill_value=bias, dtype=dtype)
+
+
+def sparse_synapses(nb_in, nb_out, nb_in_min=None, nb_in_max=None, max_samples=80000, normalise=True,
                     dtype='float32', rng=RNG, bias=None):
     """
     Creates sparse synapses.
@@ -159,8 +240,9 @@ def sparse_synapses(nb_in, nb_out, nb_in_min=None, nb_in_max=None, min_corr=0.2,
         the minimum number of input neurons connected to each output neuron.
     nb_in_max: int, optional
         the maximum number of input neurons connected to each output neuron.
-    min_corr : float, optional
-        the minimum acceptable correlation between connection patterns of the sparse code.
+    max_samples : int, optional
+        the number of times that the algorithm will generate different weights in order to choose the ones with the
+        least correlation. Default is 5
     normalise: bool, optional
         if the synaptic weights for each output neuron should sum to 1.
     dtype: np.dtype | str
@@ -175,44 +257,120 @@ def sparse_synapses(nb_in, nb_out, nb_in_min=None, nb_in_max=None, min_corr=0.2,
     params: np.ndarray | tuple
         the generated synaptic weights and the bias (if requested)
     """
-    w = uniform_synapses(nb_in, nb_out, fill_value=0., dtype=dtype)
+    w = uniform_synapses(nb_in, max_samples, fill_value=0., dtype=dtype)
 
     if nb_in_min is None:  # default: 6
-        nb_in_min = max(int(nb_in * 6. / 1000.), 1)
+        # nb_in_min = max(int(nb_in * 6. / 1000.), 1)
+        nb_in_min = int(max(nb_in / nb_out, 2))
     if nb_in_max is None:  # default: 14
-        nb_in_max = max(int(nb_in * 14. / 1000.), 1)
+        # nb_in_max = max(int(nb_in * 14. / 1000.), 1)
+        nb_in_max = nb_in_min
+        while comb(nb_in, nb_in_max - 1) < comb(nb_in, nb_in_max) < np.power(nb_in * nb_out, 4):
+            nb_in_max += 1
 
-    min_corr = np.clip(min_corr, 0, 1)  # make sure that it is in the correct range
+    # print(f"in: {nb_in}, out: {nb_out}, max(in): {nb_in_max}, repeats: {max_samples}")
 
     # number of input connections for each of of the output (sparse) neurons
-    nb_out_in = np.asarray(rng.rand(nb_out) * (nb_in_max - nb_in_min) + nb_in_min, dtype='int32')
+    nb_out_in = np.asarray(rng.rand(max_samples) * (nb_in_max - nb_in_min + 1) + nb_in_min, dtype='int32')
+    c_out_in = np.zeros(max_samples, dtype=int)  # accumulated output connections from input neurons
 
-    c_out_in = np.zeros(nb_out, dtype=int)  # accumulated output connections from input neurons
-    duplicates = np.arange(nb_out)  # the indices of the duplicated PN-KC entries
+    z = nb_out_in if normalise else np.ones_like(nb_out_in)
 
-    while len(duplicates) > 0:
-        i = rng.randint(0, nb_in - 1)
-        w[:, duplicates] = 0.
-        while c_out_in.sum() < nb_out_in.sum():
-            ii = i
-            j_s = rng.permutation(duplicates)
-            for j in j_s:  # iterate over the different output neurons
+    i_rep = 0
+    nb_unchanged = 0
+    last_completed = 0
+    while np.any(np.greater(nb_out_in, c_out_in)):
+        # explore only the output neurons that have not reached their connections limit yet
+        j_c = np.arange(max_samples)[np.greater(nb_out_in, c_out_in)]
 
-                # if the number of connections for the output neuron has reached its limit
-                # continue to the next output neuron
-                if c_out_in[j] >= nb_out_in[j] or w[i, j] > 0:
-                    continue
-                w[i, j] = 1. / nb_out_in[j] if normalise else 1.
-                i = (i + 1) % nb_in
-                c_out_in[j] += 1
-            if i == ii:
-                i = (i + 1) % nb_in
+        nb_syn_unique = np.sort(np.setdiff1d(np.unique(nb_out_in[j_c]), {0}))
 
-        c = np.dot(w.T, w) / np.outer(np.linalg.norm(w, axis=0), np.linalg.norm(w, axis=0))
-        duplicates = np.arange(nb_out)[np.greater_equal(c - np.diag(np.diagonal(c)), min_corr).max(axis=0)]
-        print(f"Number of duplicates: {duplicates.shape[0]}")
+        for nb_syn in nb_syn_unique:
+            # find the output neurons that have the target number of synapses
+            j_s = rng.permutation(j_c[nb_syn == nb_out_in[j_c]])
 
-    w = rng.permutation(w)
+            # maximum number of unique combinations of N (nb_in) choose k (nb_syn) elements
+            max_nb_comb = int(comb(nb_in, nb_syn))
+
+            # if the number of input patterns requested is not realistic given the number of unique inputs
+            # increase the number of unique inputs
+            if max_nb_comb < len(j_s) and nb_syn < nb_in:
+                sub_set = max(max_nb_comb // 2, nb_in)
+                nb_out_in[j_s[sub_set:]] += 1
+                j_s = j_s[:sub_set]
+
+            for syn in range(nb_syn):
+                for j in j_s:
+                    i = np.argmin(w.sum(axis=1))
+                    w[i, j] = 1. / z[j]
+
+                    c_out_in[j] += 1
+
+            w = w / (w.sum(axis=0) + eps)
+
+        i_rep += 1
+        if i_rep < nb_in:
+            # find the unique PN patterns
+            u_w, ui = np.unique(w, return_index=True, axis=1)
+
+            # delete the non-unique (redundant) PN patterns
+            oi = np.setdiff1d(np.arange(max_samples), ui)
+            print(f"{i_rep+1:02}/{nb_in:02}: completed: {ui.shape[0]:05}/{w.shape[1]}")
+
+            w[:, oi] = 0.
+            c_out_in[oi] = 0
+
+            if ui.shape[0] == last_completed:
+                nb_unchanged += 1
+            else:
+                nb_unchanged = 0
+            last_completed = ui.shape[0]
+            if nb_unchanged > 1:
+                w = u_w
+                break
+        else:
+            break
+
+    # normalise the synapses so that each group to inputs sum to 1
+    w = w / (w.sum(axis=0) + eps)
+
+    # find the unique input patterns
+    u_w = np.unique(w, axis=1)
+
+    # check if the unique patterns are enough for the weights matrix
+    if u_w.shape[1] < nb_out:
+
+        # if they are not enough create copies
+        w = uniform_synapses(nb_in, nb_out, fill_value=0., dtype=dtype)
+        for i in range(w.shape[1] // u_w.shape[1] + 1):
+            i_start = i * u_w.shape[1]
+            i_end = min((i + 1) * u_w.shape[1], w.shape[1])
+            u_end = (i_end - 1) % u_w.shape[1] + 1
+
+            w[:, i_start:i_end] = u_w[:, :u_end]
+    else:
+        # if they are enough keep only the unique input patterns
+        w = u_w
+
+    # create the correlation matrix among the generated input patterns
+    c = np.dot(w.T, w) / (np.outer(np.linalg.norm(w, axis=0), np.linalg.norm(w, axis=0)) + eps)
+
+    # sort the indices of the correlation matrix and keep only the ones representing the nb_out least correlations
+    c_sorted_indices = np.argsort(c, axis=1)[:, :nb_out]
+
+    # count the number of times that the index has been observed in the top nb_out (low) correlations
+    indices, counts = np.unique(c_sorted_indices, return_counts=True)
+
+    # sort the indices so that most frequent ones come to the front
+    i = indices[np.argsort(counts)[::-1]]
+
+    # select the best indices for the synapses
+    w = rng.permutation(w[:, i[:nb_out]])
+
+    # calculate correlation (for visualisation only)
+    c = np.dot(w.T, w) / (np.outer(np.linalg.norm(w, axis=0), np.linalg.norm(w, axis=0)) + eps)
+    cc = c - np.diag(np.diag(c) * np.nan)
+    print(f"\nCorrelation: max={np.nanmax(cc):.2}, mean={np.nanmean(cc):.2}")
 
     if bias is None:
         return w
