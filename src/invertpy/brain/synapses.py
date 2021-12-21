@@ -226,7 +226,7 @@ def diagonal_synapses(nb_in, nb_out, fill_value=1, tile=False, dtype='float32', 
 
 
 def sparse_synapses(nb_in, nb_out, nb_in_min=None, nb_in_max=None, max_samples=80000, normalise=True,
-                    dtype='float32', rng=RNG, bias=None):
+                    dtype='float32', rng=RNG, bias=None, verbose=False):
     """
     Creates sparse synapses.
 
@@ -251,6 +251,8 @@ def sparse_synapses(nb_in, nb_out, nb_in_min=None, nb_in_max=None, max_samples=8
         the random value generator.
     bias: float, optional
         the value of all the biases. If None, no bias is returned.
+    verbose: bool, optional
+        if True, it prints the progress. Default is false
 
     Returns
     -------
@@ -268,7 +270,8 @@ def sparse_synapses(nb_in, nb_out, nb_in_min=None, nb_in_max=None, max_samples=8
         while comb(nb_in, nb_in_max - 1) < comb(nb_in, nb_in_max) < np.power(nb_in * nb_out, 4):
             nb_in_max += 1
 
-    # print(f"in: {nb_in}, out: {nb_out}, max(in): {nb_in_max}, repeats: {max_samples}")
+    if verbose:
+        print(f"in: {nb_in}, out: {nb_out}, max(in): {nb_in_max}, repeats: {max_samples}")
 
     # number of input connections for each of of the output (sparse) neurons
     nb_out_in = np.asarray(rng.rand(max_samples) * (nb_in_max - nb_in_min + 1) + nb_in_min, dtype='int32')
@@ -315,7 +318,9 @@ def sparse_synapses(nb_in, nb_out, nb_in_min=None, nb_in_max=None, max_samples=8
 
             # delete the non-unique (redundant) PN patterns
             oi = np.setdiff1d(np.arange(max_samples), ui)
-            print(f"{i_rep+1:02}/{nb_in:02}: completed: {ui.shape[0]:05}/{w.shape[1]}")
+
+            if verbose:
+                print(f"{i_rep+1:02}/{nb_in:02}: completed: {ui.shape[0]:05}/{w.shape[1]}")
 
             w[:, oi] = 0.
             c_out_in[oi] = 0
@@ -370,7 +375,9 @@ def sparse_synapses(nb_in, nb_out, nb_in_min=None, nb_in_max=None, max_samples=8
     # calculate correlation (for visualisation only)
     c = np.dot(w.T, w) / (np.outer(np.linalg.norm(w, axis=0), np.linalg.norm(w, axis=0)) + eps)
     cc = c - np.diag(np.diag(c) * np.nan)
-    print(f"\nCorrelation: max={np.nanmax(cc):.2}, mean={np.nanmean(cc):.2}")
+
+    if verbose:
+        print(f"\nCorrelation: max={np.nanmax(cc):.2}, mean={np.nanmean(cc):.2}")
 
     if bias is None:
         return w
