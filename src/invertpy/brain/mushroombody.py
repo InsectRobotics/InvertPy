@@ -17,7 +17,8 @@ __maintainer__ = "Evripidis Gkanias"
 
 from ._helpers import eps
 from .component import Component
-from .synapses import uniform_synapses, diagonal_synapses, sparse_synapses, opposing_synapses, roll_synapses
+from .synapses import uniform_synapses, diagonal_synapses, sparse_synapses, opposing_synapses, roll_synapses,\
+    pattern_synapses
 from .activation import linear, relu, winner_takes_all
 
 import numpy as np
@@ -941,6 +942,8 @@ class VectorMemoryMB(IncentiveCircuit):
             nb_us = nb_mbon // 3
         elif nb_us is None:
             nb_us = 4
+        if nb_us % 2 != 0:  # make sure that the number of US is even
+            nb_us += 1
         if nb_kc is None:
             nb_kc = 10 * nb_cs
         if nb_dan is None:
@@ -965,13 +968,20 @@ class VectorMemoryMB(IncentiveCircuit):
         self.f_kc = lambda x: np.asarray(
             winner_takes_all(x, percentage=1 / self.nb_kc, noise=.01), dtype=self.dtype)
 
-        self.us_names = ["novelty", "familiarity home"] + [f"familiarity {chr(ord('A') + s)}" for s in range(nb_us - 2)]
-        self.mbon_names = (["s_{nov}", "s_{home}"] + [f"s_{{{chr(ord('A') + s)}}}" for s in range(nb_us - 2)] +
-                           ["r_{nov}", "r_{home}"] + [f"r_{{{chr(ord('A') + s)}}}" for s in range(nb_us - 2)] +
-                           ["m_{nov}", "m_{home}"] + [f"m_{{{chr(ord('A') + s)}}}" for s in range(nb_us - 2)])
-        self.dan_names = (["d_{nov}", "d_{home}"] + [f"d_{{{chr(ord('A') + s)}}}" for s in range(nb_us - 2)] +
-                          ["c_{nov}", "c_{home}"] + [f"c_{{{chr(ord('A') + s)}}}" for s in range(nb_us - 2)] +
-                          ["f_{nov}", "f_{home}"] + [f"f_{{{chr(ord('A') + s)}}}" for s in range(nb_us - 2)])
+        self.us_names = (["approach home", "avoid home"] +
+                         [f"{mot} {chr(ord('A') + s)}" for s in range(nb_us - 2) for mot in ["approach", "avoid"]])
+        self.mbon_names = (["s_{ap}", "s_{av}"] + [f"s_{{{mot}}}^{{{chr(ord('A') + s)}}}" for s in range(nb_us // 2 - 1)
+                                                   for mot in ["ap", "av"]] +
+                           ["r_{ap}", "r_{av}"] + [f"r_{{{mot}}}^{{{chr(ord('A') + s)}}}" for s in range(nb_us // 2 - 1)
+                                                   for mot in ["ap", "av"]] +
+                           ["m_{ap}", "m_{av}"] + [f"m_{{{mot}}}^{{{chr(ord('A') + s)}}}" for s in range(nb_us // 2 - 1)
+                                                   for mot in ["ap", "av"]])
+        self.dan_names = (["d_{ap}", "d_{av}"] + [f"d_{{{mot}}}^{{{chr(ord('A') + s)}}}" for s in range(nb_us // 2 - 1)
+                                                  for mot in ["ap", "av"]] +
+                          ["c_{ap}", "c_{av}"] + [f"c_{{{mot}}}^{{{chr(ord('A') + s)}}}" for s in range(nb_us // 2 - 1)
+                                                  for mot in ["ap", "av"]] +
+                          ["f_{ap}", "f_{av}"] + [f"f_{{{mot}}}^{{{chr(ord('A') + s)}}}" for s in range(nb_us // 2 - 1)
+                                                  for mot in ["ap", "av"]])
 
     def reset(self, **kwargs):
         super().reset(**kwargs)
@@ -1005,8 +1015,10 @@ class VectorMemoryMB(IncentiveCircuit):
         #     [[0.] + [1.] * (self.nb_dan // 3 - 1)] +
         #     [[1.] + [0.] * (self.nb_dan // 3 - 1)] * (self.nb_mbon // 3 - 1),
         #     dtype=self.dtype) * (-1.)
-        v = 1 / (pse - pss - 1)
-        self.w_m2d[pss:pse, pds:pde] += diagonal_synapses(pse-pss, pde-pds, fill_value=v, dtype=self.dtype) - v
+        # v = 1 / (pse - pss - 1)
+        v = 1
+        self.w_m2d[pss:pse, pds:pde] += pattern_synapses(diagonal_synapses((pse-pss) // 2, (pde-pds) // 2),
+                                                         opposing_synapses(2, 2, fill_value=-v), dtype=self.dtype)
 
         # Discharging DANs depress their opposite susceptible MBONs
         # self.w_d2m[pds:pde, pss:pse] += np.array(
@@ -1014,7 +1026,8 @@ class VectorMemoryMB(IncentiveCircuit):
         #     [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
         #     dtype=self.dtype) * (-1.)
         v = 1
-        self.w_d2m[pds:pde, pss:pse] += diagonal_synapses(pde-pds, pse-pss, fill_value=v, dtype=self.dtype) - v
+        self.w_d2m[pds:pde, pss:pse] += pattern_synapses(diagonal_synapses((pde-pds) // 2, (pse-pss) // 2),
+                                                         opposing_synapses(2, 2, fill_value=-v), dtype=self.dtype)
 
         # RESTRAINED MEMORY (RM) microcircuit
 
@@ -1023,8 +1036,10 @@ class VectorMemoryMB(IncentiveCircuit):
         #     [[0.] + [1.] * (self.nb_mbon // 3 - 1)] +
         #     [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_mbon // 3 - 1),
         #     dtype=self.dtype) * (-1.)
-        v = 1 / (pse - pss - 1)
-        self.w_m2m[pss:pse, prs:pre] += diagonal_synapses(pse-pss, pre-prs, fill_value=v, dtype=self.dtype) - v
+        # v = 1 / (pse - pss - 1)
+        v = 1
+        self.w_m2m[pss:pse, prs:pre] += pattern_synapses(diagonal_synapses((pse-pss) // 2, (pre-prs) // 2),
+                                                         opposing_synapses(2, 2, fill_value=-v), dtype=self.dtype)
 
         # RESTRAINED MEMORY (RM) microcircuit
 
@@ -1045,8 +1060,10 @@ class VectorMemoryMB(IncentiveCircuit):
         #     [[0.] + [1.] * (self.nb_mbon // 3 - 1)] +
         #     [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
         #     dtype=self.dtype) * (-1.)
-        v = 1 / (pre - prs - 1)
-        self.w_m2d[prs:pre, pcs:pce] += diagonal_synapses(pre-prs, pce-pcs, fill_value=v, dtype=self.dtype) - v
+        # v = 1 / (pre - prs - 1)
+        v = 1
+        self.w_m2d[prs:pre, pcs:pce] += pattern_synapses(diagonal_synapses((pre-prs) // 2, (pce-pcs) // 2),
+                                                         opposing_synapses(2, 2, fill_value=-v), dtype=self.dtype)
 
         # # Charging DANs inhibit other charging DANs
         # self.w_d2d[pcs:pce, pcs:pce] += diagonal_synapses(pce-pcs, pce-pcs, fill_value=1., dtype=self.dtype) - 1
@@ -1057,31 +1074,37 @@ class VectorMemoryMB(IncentiveCircuit):
         #     [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
         #     dtype=self.dtype) * (-1.)
         v = 1
-        self.w_d2m[pcs:pce, prs:pre] += diagonal_synapses(pce-pcs, pre-prs, fill_value=v, dtype=self.dtype) - v
+        self.w_d2m[pcs:pce, prs:pre] += pattern_synapses(diagonal_synapses((pce-pcs) // 2, (pre-prs) // 2),
+                                                         opposing_synapses(2, 2, fill_value=-v), dtype=self.dtype)
 
         # LONG-TERM MEMORY (LTM) microcircuit
 
         # LTM MBONs excite their respective charging DANs
-        self.w_m2d[pms:pme, pcs:pce] += np.eye(self.nb_mbon // 3) * self.memory_charging_speed
+        v = self.memory_charging_speed
+        self.w_m2d[pms:pme, pcs:pce] += diagonal_synapses(pme-pms, pce-pcs, fill_value=v, dtype=self.dtype)
 
         # Forgetting DANs inhibit other forgetting DANs
         # self.w_d2d[pfs:pfe, pfs:pfe] += diagonal_synapses(pce-pcs, pce-pcs, fill_value=1., dtype=self.dtype) - 1
 
         # Charging DANs potentiate their respective LTM MBONs
-        self.w_d2m[pcs:pce, pms:pme] += np.eye(self.nb_mbon // 3) * self.memory_charging_speed
+        v = self.memory_charging_speed
+        self.w_d2m[pcs:pce, pms:pme] += diagonal_synapses(pce-pcs, pme-pms, fill_value=v, dtype=self.dtype)
 
         # RECIPROCAL LONG-TERM MEMORIES (RLM) microcircuit
 
         # LTM MBONs excite their respective forgetting DANs
-        self.w_m2d[pms:pme, pfs:pfe] += diagonal_synapses(pme-pms, pfe-pfs, fill_value=1, dtype=self.dtype)
+        v = 1
+        self.w_m2d[pms:pme, pfs:pfe] += diagonal_synapses(pme-pms, pfe-pfs, fill_value=v, dtype=self.dtype)
 
         # LTM MBONs inhibit their opposite forgetting DANs
         # self.w_m2d[pms:pme, pfs:pfe] += np.array(
         #     [[0.] + [1.] * (self.nb_mbon // 3 - 1)] +
         #     [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
         #     dtype=self.dtype) * (-1.)
-        v = 1 / (pme - pfs - 1)
-        self.w_m2d[pms:pme, pfs:pfe] += diagonal_synapses(pme-pms, pfe-pfs, fill_value=v, dtype=self.dtype) - v
+        # v = 1 / (pme - pfs - 1)
+        v = 1
+        self.w_m2d[pms:pme, pfs:pfe] += pattern_synapses(diagonal_synapses((pme-pms) // 2, (pfe-pfs) // 2),
+                                                         opposing_synapses(2, 2, fill_value=-v), dtype=self.dtype)
 
         # Forgetting DANs depress their opposite long-term memory MBONs
         # self.w_d2m[pfs:pfe, pms:pme] += np.array(
@@ -1089,12 +1112,14 @@ class VectorMemoryMB(IncentiveCircuit):
         #     [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
         #     dtype=self.dtype) * (-1.)
         v = 1
-        self.w_d2m[pfs:pfe, pms:pme] += diagonal_synapses(pfe-pfs, pme-pms, fill_value=v, dtype=self.dtype) - v
+        self.w_d2m[pfs:pfe, pms:pme] += pattern_synapses(diagonal_synapses((pfe-pfs) // 2, (pme-pms) // 2),
+                                                         opposing_synapses(2, 2, fill_value=-v), dtype=self.dtype)
 
         # MEMORY ASSIMILATION MECHANISM (MAM) microcircuit
 
         # Forgetting DANs depress their respective restrained MBONs
-        self.w_d2m[pfs:pfe, prs:pre] += np.eye(self.nb_mbon // 3) * (-self.memory_charging_speed)
+        v = self.memory_charging_speed
+        self.w_d2m[pfs:pfe, prs:pre] += diagonal_synapses(pfe-pfs, pre-prs, fill_value=-v, dtype=self.dtype)
 
     def __repr__(self):
         return super().__repr__().replace("IncentiveCircuit", "FamiliarityCircuit")

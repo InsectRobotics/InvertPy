@@ -102,6 +102,8 @@ class VectorMemoryCX(StoneCX):
         self._c_rings = None  # the working rings
         self._c_vec = None  # the working vector
         self._v_change = False  # show if the vector is different from before
+        self.__vector_in_memory = True
+        self.__vector_in_steering = False
 
         super().__init__(*args, **kwargs)
 
@@ -127,6 +129,10 @@ class VectorMemoryCX(StoneCX):
         self._v_change = False
 
         self.update = True
+
+    def set_vector_in_memory(self, true=True):
+        self.__vector_in_memory = true
+        self.__vector_in_steering = not true
 
     def _fprop(self, phi, flow, tl2=None, cl1=None, mbon=None, visual_rings=None):
         """
@@ -181,20 +187,20 @@ class VectorMemoryCX(StoneCX):
     def update_memory(self, tb1=None, tn1=None, tn2=None):
         a_cpu4 = super().update_memory(tb1=tb1, tn1=tn1, tn2=tn2)
 
-        # vec_mem = 0.
-        # if self._c_vec is not None:
-        #     vec_mem = 0.5 - self.f_mem(self._c_vec.dot(self.w_vec2cpu4))
-        # a_cpu4 = self.f_mem(self.cpu4_mem + vec_mem)
-
-        if self.update:
+        if self.__vector_in_memory:
+            vec_mem = 0.
             if self._c_vec is not None:
-                # check if the vector has changed
-                self._v_change = np.argmax(self._vec) != np.argmax(self._c_vec)
+                vec_mem = 0.5 - self._c_vec.dot(self.w_vec2cpu4)
+            a_cpu4 = self.f_mem(self.cpu4_mem + vec_mem)
 
-                # reset the memory when the motivation changes
-                if self._v_change:
-                    self.reset_current_memory()
-                    self._vec_t[np.argmax(self._vec)] += 1
+        if self.update and self._c_vec is not None:
+            # check if the vector has changed
+            self._v_change = np.argmax(self._vec) != np.argmax(self._c_vec)
+
+            # reset the memory when the motivation changes
+            if self._v_change:
+                self.reset_current_memory()
+                self._vec_t[np.argmax(self._vec)] += 1
 
         return a_cpu4
 
@@ -202,7 +208,7 @@ class VectorMemoryCX(StoneCX):
         if cpu4 is None:
             cpu4 = self._mem
         vec_mem = 0.
-        if self._c_vec is not None:
+        if self._c_vec is not None and self.__vector_in_steering:
             vec_mem = 0.5 - self.f_mem(self._c_vec.dot(self.w_vec2cpu4))
 
         return super().update_steering(cpu4=cpu4 + vec_mem, tb1=tb1)
@@ -239,8 +245,8 @@ class VectorMemoryCX(StoneCX):
         elif max_v > 0:  # use single integrator
             print(f"STORE VECTOR AT VEC_{max_v+1}!")
             self.w_vec2cpu4[max_v] = self.cpu4_mem
-            if max_v == 0:
-                self.reset_integrator()
+        elif max_v == 0:
+            self.reset_integrator()
 
     def get_vectors_distance(self):
         if self._multi:  # use multiple integrators
