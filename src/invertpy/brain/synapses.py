@@ -131,15 +131,29 @@ def diagonal_synapses(nb_in, nb_out, fill_value=1, tile=False, dtype='float32', 
     params: np.ndarray | tuple
         the generated synaptic weights and the bias (if requested)
     """
-    w = None
     if tile:
-        if nb_in // nb_out > 1:
-            w = fill_value * np.tile(np.eye(nb_out, dtype=dtype), (nb_in//nb_out, 1))
-        elif nb_out // nb_in > 1:
-            w = fill_value * np.tile(np.eye(nb_in, dtype=dtype), (1, nb_out//nb_in))
+        w = np.zeros((nb_in, nb_out), dtype=dtype)
+        if nb_out < nb_in:
+            _w = w
+            _nb_in = nb_in
+            _nb_out = nb_out
         else:
-            tile = False
-    if not tile:
+            _w = w.T
+            _nb_in = nb_out
+            _nb_out = nb_in
+
+        i = 0
+        while np.sum(~np.isclose(_w, 0)) < _nb_in:
+            i_start = i * _nb_out
+            i_end = np.minimum((i + 1) * _nb_out, _nb_in)
+            _w[i_start:i_end] = fill_value * np.eye(i_end-i_start, _nb_out)
+            i += 1
+
+        if nb_out < nb_in:
+            w = _w
+        else:
+            w = _w.T
+    else:
         w = fill_value * np.eye(nb_in, nb_out, dtype=dtype)
     if bias is None:
         return w
@@ -428,7 +442,7 @@ def opposing_synapses(nb_in, nb_out, fill_value=1., dtype='float32', bias=None):
         return w, np.full(nb_out, fill_value=bias, dtype=dtype)
 
 
-def sinusoidal_synapses(nb_in, nb_out, fill_value=1., dtype='float32', bias=None):
+def sinusoidal_synapses(nb_in, nb_out, in_period=None, out_period=None, fill_value=1., dtype='float32', bias=None):
     """
     Creates a diagonal of sunusoidal synapses.
 
@@ -438,6 +452,10 @@ def sinusoidal_synapses(nb_in, nb_out, fill_value=1., dtype='float32', bias=None
         the number of the input units.
     nb_out: int
         the number of the output units.
+    in_period: int
+        the number of input units that constitute 1 period of the sinusoid. Default is the number of input units
+    out_period: int
+        the number of output units that constitute 1 period of the sinusoid. Default is the number of output units
     fill_value: float, optional
         the value of all the synaptic weights.
     dtype: np.dtype | str
@@ -450,10 +468,17 @@ def sinusoidal_synapses(nb_in, nb_out, fill_value=1., dtype='float32', bias=None
     params: np.ndarray | tuple
         the generated synaptic weights and the bias (if requested)
     """
+
+    if in_period is None:
+        in_period = nb_in
+    if out_period is None:
+        out_period = nb_out
+
     w = np.zeros((nb_in, nb_out), dtype=dtype)
-    pref_in = np.linspace(0, 2*np.pi, nb_in, endpoint=False)
+    pref_in = np.linspace(0, 2 * np.pi * nb_in / in_period, nb_in, endpoint=False)
     for i in range(nb_in):
-        w[i, :] = fill_value * (-np.cos(np.linspace(0, 2 * np.pi, nb_out, endpoint=False) + pref_in[i]) + 1) / 2
+        pref_out = np.linspace(0, 2 * np.pi * nb_out / out_period, nb_out, endpoint=False)
+        w[i, :] = fill_value * (np.cos(pref_in[i] - pref_out) + 1) / 2
     if bias is None:
         return w
     else:
@@ -641,9 +666,9 @@ def roll_synapses(w, left=None, right=None, up=None, down=None):
         w = np.hstack([w[:, -int(right):], w[:, :-int(right)]])
 
     if up is not None:
-        w = np.vstack([w[int(left):, :], w[:int(left), :]])
+        w = np.vstack([w[int(up):, :], w[:int(up), :]])
     elif down is not None:
-        w = np.vstack([w[-int(right):, :], w[:-int(right), :]])
+        w = np.vstack([w[-int(down):, :], w[:-int(down), :]])
 
     return w
 

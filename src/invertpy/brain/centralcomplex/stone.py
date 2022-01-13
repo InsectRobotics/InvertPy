@@ -115,7 +115,6 @@ class StoneCX(CentralComplexBase):
         # The cell properties (for sigmoid function)
         self._tl2_slope = 6.8
         self._cl1_slope = 3.0
-        self._tb1_slope = 5.0
         self._ste_slope = 7.5 if pontine else 5.0
         self._motor_slope = 1.0
         self._pontine_slope = 5.0
@@ -141,17 +140,18 @@ class StoneCX(CentralComplexBase):
 
         self.f_tl2 = lambda v: sigmoid(v * self._tl2_slope - self.b_tl2, noise=self._noise, rng=self.rng)
         self.f_cl1 = lambda v: sigmoid(v * self._cl1_slope - self.b_cl1, noise=self._noise, rng=self.rng)
-        self.f_tb1 = lambda v: sigmoid(v * self._tb1_slope - self.b_tb1, noise=self._noise, rng=self.rng)
         self.f_pontine = lambda v: sigmoid(v * self._pontine_slope - self.b_pontine, noise=self._noise, rng=self.rng)
         self.f_cpu1 = lambda v: sigmoid(v * self._ste_slope - self.b_cpu1, noise=self._noise, rng=self.rng)
 
-        self.reset()
+        if self.__class__ == StoneCX:
+            self.reset()
 
     def reset(self):
         # Weight matrices based on anatomy (These are not changeable!)
         self.w_tl22cl1 = diagonal_synapses(self.nb_tl2, self.nb_cl1, fill_value=-1, dtype=self.dtype)
         self.w_cl12tb1 = diagonal_synapses(self.nb_cl1, self.nb_tb1, fill_value=1, tile=True, dtype=self.dtype)
-        self.w_tb12tb1 = sinusoidal_synapses(self.nb_tb1, self.nb_tb1, fill_value=-1, dtype=self.dtype)
+        self.w_tb12tb1 = sinusoidal_synapses(self.nb_tb1, self.nb_tb1, fill_value=1, dtype=self.dtype) - 1
+
         self.w_tb12cpu4 = diagonal_synapses(self.nb_tb1, self.nb_cpu4, fill_value=-1, tile=True, dtype=self.dtype)
         self.w_tn22cpu4 = chessboard_synapses(self.nb_tn2, self.nb_cpu4, nb_rows=2, nb_cols=2, fill_value=1,
                                               dtype=self.dtype)
@@ -283,7 +283,8 @@ class StoneCX(CentralComplexBase):
             mem = mem_tn1 * mem_tb1 - mem_tn2
 
             cpu4_mem = self.__cpu4 + self._gain * mem
-        cpu4_mem = np.clip(cpu4_mem, 0., 1.)
+        # this creates a problem with vector memories
+        # cpu4_mem = np.clip(cpu4_mem, 0., 1.)
 
         if self.update:
             self.__cpu4 = cpu4_mem
