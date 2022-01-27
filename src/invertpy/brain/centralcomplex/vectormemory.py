@@ -19,7 +19,7 @@ from invertpy.brain.synapses import *
 from invertpy.brain.activation import sigmoid, hardmax
 
 from .stone import StoneCX
-from ._helpers import tn_axes
+from ._helpers import decode_vector
 
 import numpy as np
 import os
@@ -33,7 +33,7 @@ x = np.linspace(0, 2 * np.pi, N_COLUMNS, endpoint=False)
 
 class VectorMemoryCX(StoneCX):
 
-    def __init__(self, nb_vectors=4, nb_mbon=2, *args, **kwargs):
+    def __init__(self, nb_vectors=4, nb_mbon=6, *args, **kwargs):
         """
         The Central Complex model of [1]_ as a component of the locust brain.
 
@@ -81,52 +81,55 @@ class VectorMemoryCX(StoneCX):
         self._nb_vecs = nb_vectors
         self._nb_mbon = nb_mbon
         nb_cpu4 = kwargs['nb_cpu4']
-        noise = kwargs['noise']
-        rng = kwargs['rng']
         dtype = kwargs['dtype']
 
         # initialise the responses of the neurons
         self._vec = np.zeros(nb_vectors)
         self._mbon = np.zeros(nb_mbon)
-        self._vec_t = np.zeros_like(self._vec)
 
         # Weight matrices based on anatomy (These are not changeable!)
 
         # cpu4 memory
-        self._w_mbon2vec = uniform_synapses(nb_mbon, nb_vectors, fill_value=0, dtype=dtype)
         self._w_vec2cpu4 = uniform_synapses(nb_vectors, nb_cpu4, fill_value=.5, dtype=dtype)
+        self._w_mem2cpu4 = sinusoidal_synapses(nb_cpu4, nb_cpu4,
+                                               in_period=nb_cpu4//2, out_period=nb_cpu4//2, dtype=dtype)
+
+        self._w_mbon2tfn = np.array([[1] * nb_cpu4, [-1] * nb_cpu4] * (nb_mbon // 2), dtype=dtype) / (nb_mbon / 2)
+
+        # ensures a smooth sinusoidal pattern in the CPU4 neurons
+        self._w_mem2cpu4 = self._w_mem2cpu4 / np.sum(self._w_mem2cpu4, axis=1)
 
         self.f_vec = lambda v: v
-        self.f_mbon = lambda v: hardmax(v, noise=noise + 0.01, rng=rng)
-        self._multi = False
-        self._c_rings = None  # the working rings
         self._c_vec = None  # the working vector
-        self._v_change = False  # show if the vector is different from before
         self.__vector_in_memory = True
         self.__vector_in_steering = False
 
         super().__init__(*args, **kwargs)
 
+        self.__cpu4_mem_grad = np.zeros_like(super().cpu4_mem)
+
         self._vec_slope = 5.
         self._b_vec = 2.5
 
         self.params.extend([
-            self._w_mbon2vec,
+            self._w_mbon2tfn,
             self._w_vec2cpu4
         ])
+
+        if self.__class__ == VectorMemoryCX:
+            self.reset()
 
     def reset(self):
         super().reset()
 
-        self.w_mbon2vec = np.zeros_like(self._w_mbon2vec)
-        self.w_mbon2vec[0, 0] = 1
-        self.w_mbon2vec[1:, 1:] = diagonal_synapses(self._nb_mbon - 1, self.nb_vectors - 1, fill_value=1.,
-                                                    tile=True, dtype=self.dtype)
         self.w_vec2cpu4 = uniform_synapses(self.nb_vectors, self.nb_cpu4, fill_value=.5, dtype=self.dtype)
 
-        self._vec_t = np.zeros_like(self._vec)
-        self._c_vec = None
-        self._v_change = False
+        self._c_vec = np.zeros(self.nb_vectors)
+
+        self._vec = np.zeros(self.nb_vectors)
+        self._mbon = np.zeros(self.nb_mbon)
+
+        self.__cpu4_mem_grad = np.zeros_like(super().cpu4_mem)
 
         self.update = True
 
@@ -134,7 +137,7 @@ class VectorMemoryCX(StoneCX):
         self.__vector_in_memory = true
         self.__vector_in_steering = not true
 
-    def _fprop(self, phi, flow, tl2=None, cl1=None, mbon=None, visual_rings=None):
+    def _fprop(self, phi, flow, tl2=None, cl1=None, mbon=None, vec=None):
         """
         Parameters
         ----------
@@ -147,9 +150,9 @@ class VectorMemoryCX(StoneCX):
         cl1 : np.ndarray[float]
             the CL1 responses
         mbon: np.ndarray[float]
-            the MBON activity comes from the mushroom body
-        visual_rings: np.ndarray[float]
-            rings based on teh visual cues
+            the responses from the output neurons of the mushroom body coming using the FB tangential neurons
+        vec: np.ndarray[float]
+            the target vector
 
         Returns
         -------
@@ -157,30 +160,26 @@ class VectorMemoryCX(StoneCX):
             the CPU1 responses that are used for steering
         """
 
-        if mbon is None or np.all(np.isclose(mbon, 0)):  # default is homing PI
-            mbon = np.zeros_like(self._mbon)
-            mbon[0] = 1.
+        if vec is not None:
+            # the actual target vector
+            self._c_vec[:] = a_vec = self.f_vec(vec)
 
-        # select vector based on motivation
-        a_mbon = self.f_mbon(mbon)
-        vec_mot = a_mbon.dot(self.w_mbon2vec)
-        # select most recent vector
-        # vec_tim = np.exp(-self._vec_t)
-        vec_tim = 1.
-        # get the closest memory
-        # vec_dis = self.get_vectors_distance()
-        vec_dis = 1.
-        # weight more the closest vector
-        self._c_vec = a_vec = self.f_vec(vec_mot * vec_tim * vec_dis)
-        # print(f"vec: {a_vec}, mot: {vec_mot}, time: {vec_tim}, dist: {vec_dis}, all: {vec_mot * vec_tim * vec_dis}")
-        print(f"MBON: {np.array2string(mbon, precision=2)}, "
-              f"VEC: {np.array2string(vec_mot, precision=1)}, "
-              f"MEM2VEC: {np.absolute(self.mem2vector())}")
+            print(f"VEC: {np.array2string(self._c_vec, precision=1)}, "
+                  f"MEM2VEC: {np.absolute(self.mem2vector())}")
+
+        # update the view-based integrator
+        # if mbon_grad is not None:
+        #     self.update_views_integrator(mbon_grad)
 
         a_cpu1 = super()._fprop(phi, flow, tl2=tl2, cl1=cl1)
 
-        self._mbon = mbon
-        self._vec = a_vec
+        if mbon is not None:
+            # update the PI by using the visual cues
+            self.update_views_integrator(mbon)
+            self._mbon[:] = mbon
+
+        if vec is not None:
+            self._vec[:] = self._c_vec
 
         return a_cpu1
 
@@ -191,16 +190,8 @@ class VectorMemoryCX(StoneCX):
             vec_mem = 0.
             if self._c_vec is not None:
                 vec_mem = 0.5 - self._c_vec.dot(self.w_vec2cpu4)
-            a_cpu4 = self.f_mem(self.cpu4_mem + vec_mem)
 
-        if self.update and self._c_vec is not None:
-            # check if the vector has changed
-            self._v_change = np.argmax(self._vec) != np.argmax(self._c_vec)
-
-            # reset the memory when the motivation changes
-            if self._v_change:
-                self.reset_current_memory()
-                self._vec_t[np.argmax(self._vec)] += 1
+            a_cpu4 = self.f_mem((self.cpu4_mem + vec_mem).dot(self.w_mem2cpu4))
 
         return a_cpu4
 
@@ -210,6 +201,8 @@ class VectorMemoryCX(StoneCX):
         vec_mem = 0.
         if self._c_vec is not None and self.__vector_in_steering:
             vec_mem = 0.5 - self.f_mem(self._c_vec.dot(self.w_vec2cpu4))
+
+        cpu4 += self.__cpu4_mem_grad
 
         return super().update_steering(cpu4=cpu4 + vec_mem, tb1=tb1)
 
@@ -238,22 +231,43 @@ class VectorMemoryCX(StoneCX):
     #             self._vec_t[np.argmax(self._vec)] += 1
 
     def reset_current_memory(self):
-        max_v = np.argmax(self._vec)
-        if self._multi:  # use multiple integrators
-            print("RESET!")
-            self.w_vec2cpu4[max_v] = 0.5
-        elif max_v > 0:  # use single integrator
-            print(f"STORE VECTOR AT VEC_{max_v+1}!")
-            self.w_vec2cpu4[max_v] = self.cpu4_mem
-        elif max_v == 0:
+        self.reset_memory(np.argmax(self._vec))
+
+    def reset_memory(self, id):
+        if id > 0:
+            print(f"STORE VECTOR AT VEC_{id+1}!")
+            self.w_vec2cpu4[id] += self.r_vec[id] * (self.cpu4_mem - self.w_vec2cpu4[id])
+        elif id == 0:
             self.reset_integrator()
 
+    def update_views_integrator(self, mbon):
+        # get the FB tangential neurons responses
+        tfn = mbon.dot(self.w_mbon2tfn)
+
+        tn1 = self.r_tn1
+        tn2 = self.r_tn2
+        tb1 = self.r_tb1
+
+        # get PFN responses
+        if self._pontine and not self._holonomic:
+            mem = np.clip(tn2.dot(self.w_tn22cpu4) + tb1.dot(self.w_tb12cpu4), 0, 1) - 0.125
+        else:
+            # Idealised setup, where we can negate the TB1 sinusoid for memorising backwards motion
+            mem_tn1 = (.5 - tn1).dot(self.w_tn22cpu4)
+            mem_tb1 = (tb1 - 1).dot(self.w_tb12cpu4)
+
+            # Both CPU4 waves must have same average
+            # If we don't normalise get drift and weird steering
+            mem_tn2 = 0.25 * tn2.dot(self.w_tn22cpu4)
+
+            mem = mem_tn1 * mem_tb1 - mem_tn2
+
+        # the current view dirrection
+        self.__cpu4_mem_grad = tfn * mem
+
     def get_vectors_distance(self):
-        if self._multi:  # use multiple integrators
-            return np.absolute(self.mem2vector())
-        else:  # use single integrator
-            w = self.w_vec2cpu4.copy() + self.w_vec2cpu4[0] - 0.5
-            return np.absolute(mem2vector(w, self._gain))
+        w = self.w_vec2cpu4.copy() + self.w_vec2cpu4[0] - 0.5
+        return np.absolute(mem2vector(w, self._gain))
 
     def mem2vector(self):
         """
@@ -272,25 +286,6 @@ class VectorMemoryCX(StoneCX):
                f"{', Pontine=True' if self.pontine else ''}{', holonomic=True' if self.holonomic else ''})"
 
     @property
-    def v_change(self):
-        return self._v_change
-
-    @property
-    def w_mbon2vec(self):
-        """
-        The motivation to vector selection synaptic weights.
-
-        Returns
-        -------
-        np.ndarray[float]
-        """
-        return self._w_mbon2vec
-
-    @w_mbon2vec.setter
-    def w_mbon2vec(self, v):
-        self._w_mbon2vec[:] = v[:]
-
-    @property
     def w_vec2cpu4(self):
         """
         The vectors to CPU4 synaptic weights.
@@ -304,6 +299,36 @@ class VectorMemoryCX(StoneCX):
     @w_vec2cpu4.setter
     def w_vec2cpu4(self, v):
         self._w_vec2cpu4[:] = v[:]
+
+    @property
+    def w_mbon2tfn(self):
+        """
+        The MBON to tangential FB synaptic weights.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._w_mbon2tfn
+
+    @w_mbon2tfn.setter
+    def w_mbon2tfn(self, v):
+        self._w_mbon2tfn[:] = v[:]
+
+    @property
+    def w_mem2cpu4(self):
+        """
+        The weights that are used in order to load the stored memory.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._w_mem2cpu4
+
+    @w_mem2cpu4.setter
+    def w_mem2cpu4(self, v):
+        self._w_mem2cpu4[:] = v[:]
 
     @property
     def nb_vectors(self):
@@ -330,6 +355,10 @@ class VectorMemoryCX(StoneCX):
     @property
     def r_vec(self):
         return self._vec
+    #
+    # @property
+    # def cpu4_mem(self):
+    #     return super().cpu4_mem + self.__cpu4_mem_grad / 2
 
 
 def mem2vector(mem, gain):

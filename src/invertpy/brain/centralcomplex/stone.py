@@ -19,7 +19,7 @@ from invertpy.brain.synapses import *
 from invertpy.brain.activation import sigmoid
 
 from .centralcomplex import CentralComplexBase
-from ._helpers import tn_axes
+from ._helpers import tn_axes, decode_vector
 
 import numpy as np
 import os
@@ -408,16 +408,7 @@ class StoneCX(CentralComplexBase):
         -------
         complex
         """
-        vec_reshaped = self.__cpu4.reshape((2, -1))
-        vec_shifted = np.array([np.roll(vec_reshaped[0], 1, axis=-1),
-                                np.roll(vec_reshaped[1], -1, axis=-1)])
-        signal = np.sum(vec_shifted, axis=0)
-
-        fund_freq = np.fft.fft(signal)[1]
-        angle = -np.angle(np.conj(fund_freq))
-        distance = np.absolute(fund_freq) / self._gain
-
-        return distance * np.exp(1j * angle)
+        return decode_vector(self.__cpu4, self._gain)
 
     @property
     def w_tl22cl1(self):

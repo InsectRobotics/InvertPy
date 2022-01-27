@@ -179,7 +179,7 @@ def softmax(x, tau=1., cmin=0., cmax=1, noise=0., rng=RNG, axis=None):
     return np.clip(y, cmin, cmax)
 
 
-def winner_takes_all(x, tau=None, percentage=.05, cmin=0., cmax=1., noise=0., rng=RNG):
+def winner_takes_all(x, tau=None, percentage=.05, normalise=False, cmin=0., cmax=1., noise=0., rng=RNG):
     """
     The Winner Takes All (WTA) algorithm can be used to force sparse coding.
 
@@ -203,6 +203,8 @@ def winner_takes_all(x, tau=None, percentage=.05, cmin=0., cmax=1., noise=0., rn
         percentage approach is applied.
     percentage: float, optional
         the percentage of the active neurons that we want to keep.
+    normalise: bool, optional
+        if True, then the output will sum to one.
     cmin: float, optional
         the minimum constant
     cmax: float, optional
@@ -221,6 +223,9 @@ def winner_takes_all(x, tau=None, percentage=.05, cmin=0., cmax=1., noise=0., rn
         y = np.asarray(np.greater(y.T, np.quantile(y, 1 - percentage, axis=-1)).T, dtype=x.dtype)
     else:
         y = np.asarray(np.greater_equal(y, tau), dtype=x.dtype)
+
+    if normalise:
+        y /= (y.sum() + np.finfo(float).eps)
 
     return np.clip(y, cmin, cmax)
 

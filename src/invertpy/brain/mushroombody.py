@@ -84,8 +84,9 @@ class MushroomBody(Component):
         self._nb_mbon = nb_mbon
 
         # set the parameters (synapses)
-        self._w_c2k = sparse_synapses(self.nb_cs, self.nb_kc,  nb_in_min=1, nb_in_max=4,
-                                      max_samples=400, dtype=self.dtype)
+        max_samples = np.maximum(1000, nb_kc)
+        self._w_c2k = sparse_synapses(self.nb_cs, self.nb_kc, dtype=self.dtype,
+                                      nb_in_min=1, nb_in_max=4, max_samples=max_samples)
         # self._w_c2k *= self.nb_cs / self.w_c2k.sum(axis=1)[:, np.newaxis]
         self._w_k2k = None
         self._w_a2k, self._b_k = uniform_synapses(nb_apl, nb_kc, dtype=self.dtype, bias=0)
@@ -117,6 +118,8 @@ class MushroomBody(Component):
         self.f_apl = lambda x: relu(x, cmax=2, noise=self._noise, rng=self.rng)
         self.f_mbon = lambda x: relu(x, cmax=2, noise=self._noise, rng=self.rng)
 
+        if sparseness * nb_kc < 1:
+            sparseness = 1 / nb_kc
         self._sparseness = sparseness
         self._maximum_weight = 50
 
@@ -317,7 +320,7 @@ class MushroomBody(Component):
         _apl = kc_pre.dot(self.w_k2a) + self.b_a
         a_apl = self.f_apl(self.update_values(_apl, v_pre=apl_pre, eta=None if v_update else (1. - self._lambda)))
 
-        _mbon = kc_pre.dot(self.w_k2m) + mbon_pre.dot(self.w_m2m) + self.b_m
+        _mbon = kc_pre.dot(self.w_k2m) / (np.sum(kc_pre) + eps) + mbon_pre.dot(self.w_m2m) + self.b_m
         a_mbon = self.f_mbon(self.update_values(_mbon, v_pre=mbon_pre, eta=None if v_update else (1. - self._lambda)))
 
         if self.update:
@@ -993,12 +996,12 @@ class VectorMemoryMB(IncentiveCircuit):
         prs, pre = self._prs, self._pre
         pms, pme = self._pms, self._pme
 
-        self.b_d[pds:pde] = 0.
+        self.b_d[pds:pde] = -0.5
         self.b_d[pcs:pce] = 0.
         self.b_d[pfs:pfe] = 0.
         self.b_m[pss:pse] = -0.
         self.b_m[prs:pre] = -0.
-        self.b_m[pms:pme] = -1.
+        self.b_m[pms:pme] = -0.
 
         self._dan[0, :, ...] = self.b_d.copy()
         self._mbon[0, :, ...] = self.b_m.copy()
@@ -1053,7 +1056,8 @@ class VectorMemoryMB(IncentiveCircuit):
         # RECIPROCAL SHORT-TERM MEMORIES (RSM) microcircuit
 
         # Restrained MBONs excite their respective charging DANs
-        self.w_m2d[prs:pre, pcs:pce] += diagonal_synapses(pre-prs, pce-pcs, fill_value=1, dtype=self.dtype)
+        v = 1
+        self.w_m2d[prs:pre, pcs:pce] += diagonal_synapses(pre-prs, pce-pcs, fill_value=v, dtype=self.dtype)
 
         # Restrained MBONs inhibit the opposite charging DANs
         # self.w_m2d[prs:pre, pcs:pce] += np.array(

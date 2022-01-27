@@ -366,6 +366,9 @@ def sparse_synapses(nb_in, nb_out, nb_in_min=None, nb_in_max=None, max_samples=8
             i_end = min((i + 1) * u_w.shape[1], w.shape[1])
             u_end = (i_end - 1) % u_w.shape[1] + 1
 
+            if i_end - i_start != u_end:
+                continue
+
             w[:, i_start:i_end] = u_w[:, :u_end]
     else:
         # if they are enough keep only the unique input patterns

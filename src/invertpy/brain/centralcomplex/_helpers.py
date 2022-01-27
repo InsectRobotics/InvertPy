@@ -150,3 +150,16 @@ def get_flow(heading, velocity, r_sensors):
     lr_2 = linear_range_model(flow_tn_2, img_flow, w=.1)
 
     return np.array([lr_1, lr_2])
+
+
+def decode_vector(vector, gain=0.05):
+    vec_reshaped = vector.reshape((2, -1))
+    vec_shifted = np.array([np.roll(vec_reshaped[0], 1, axis=-1),
+                            np.roll(vec_reshaped[1], -1, axis=-1)])
+    signal = np.sum(vec_shifted, axis=0)
+
+    fund_freq = np.fft.fft(signal)[1]
+    angle = -np.angle(np.conj(fund_freq))
+    distance = np.absolute(fund_freq) / gain
+
+    return distance * np.exp(1j * angle)

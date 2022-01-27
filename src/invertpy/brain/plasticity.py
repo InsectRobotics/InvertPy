@@ -22,12 +22,15 @@ __license__ = "MIT"
 __version__ = "v1.0.0-alpha"
 __maintainer__ = "Evripidis Gkanias"
 
+from .activation import leaky_relu
+
 import numpy as np
 
 __init_dir__ = set(dir()) | {'__init_dir__'}
 
 
-def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
+def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.,
+                 binary_pre=False, passive_effect=1e-04):
     """
     The dopaminergic learning rule introduced in Gkanias et al (2021). Reinforcement here is assumed to be the
     dopaminergic factor.
@@ -42,18 +45,25 @@ def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
 
     Parameters
     ----------
-    w: np.ndarray
+    w: np.ndarray[float]
         the current synaptic weights.
-    r_pre: np.ndarray
+    r_pre: np.ndarray[float]
         the pre-synaptic responses.
-    r_post: np.ndarray
+    r_post: np.ndarray[float]
         the post-synaptic responses.
-    rein: np.ndarray
+    rein: np.ndarray[float]
         the dopaminergic factor.
     learning_rate: float, optional
         the learning rate.
-    w_rest: np.ndarray | float
+    w_rest: np.ndarray[float] | float
         the resting value for the synaptic weights.
+    binary_pre : bool, optional
+        if True, the r_pre becomes binary. Default is False
+    passive_effect : bool, float
+        If True, the passive effect is enabled.
+        If False, the passive effect is disabled.
+        If float, the passive effect is multiplied with this float.
+        Default is 0.1
 
     Returns
     -------
@@ -65,7 +75,12 @@ def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     else:
         dop_fact = rein[np.newaxis, ...]
     r_pre = r_pre[..., np.newaxis]
-    d_w = learning_rate * dop_fact * (r_pre + w - w_rest)
+
+    # transform the pre-synaptic responses to binary: 1 if r_pre > 0, 0 otherwise
+    if binary_pre:
+        r_pre = np.array(np.greater(r_pre, 0), dtype=r_pre.dtype)
+
+    d_w = learning_rate * dop_fact * leaky_relu(r_pre + w - w_rest, leak=float(passive_effect))
     if d_w.ndim > 2:
         d_w = d_w.sum(axis=0)
     return w + d_w

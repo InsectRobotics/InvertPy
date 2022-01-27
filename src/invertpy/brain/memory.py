@@ -17,13 +17,15 @@ __license__ = "MIT"
 __version__ = "v1.0.0-alpha"
 __maintainer__ = "Evripidis Gkanias"
 
-import scipy.stats
+import numbers
 
 from .component import Component
+from .mushroombody import VectorMemoryMB
 from .synapses import uniform_synapses, sparse_synapses, random_synapses
 from .activation import relu, sigmoid, winner_takes_all
 
 from sklearn.metrics import mean_squared_error
+from copy import copy
 from abc import ABC
 
 import numpy as np
@@ -193,6 +195,231 @@ class MemoryComponent(Component, ABC):
             self._novelty_mode = self._novelty_name.index(v)
         elif isinstance(v, int):
             self._novelty_mode = v
+
+
+class IncentiveCircuitMemory(MemoryComponent):
+
+    def __init__(self, nb_input, nb_output=1, nb_sparse=None, learning_rule='dopaminergic', eligibility_trace=.1,
+                 sparseness=.03, *args, **kwargs):
+        """
+        The Whillshaw Network is a simplified Mushroom Body circuit that is used for associative memory tasks. It
+        contains the input, sparse and output layers. In the sparse layer, we create a sparse representation of the
+        input layer, and its synaptic weights are fixed. The sparse-to-output layer synapses are plastic.
+
+        Examples
+        --------
+        >>> wn = IncentiveCircuitMemory(nb_input=360, nb_kc=1000)
+        >>> wn.nb_input
+        360
+        >>> wn.nb_sparse
+        1000
+
+        Parameters
+        ----------
+        nb_input : int
+            the number of input units
+        nb_output : int, optional
+            the number of output units. Default is 1
+        nb_sparse : int, optional
+            the number of sparse units. Default is 40 times the number of input units
+        learning_rule : callable, str
+            the name of a learning rule or a function representing it. The function could have as input:
+                w - the synaptic weights to be updated,
+                r_pre - the pre-synaptic responses,
+                r_post - the post synaptic responses,
+                rein - the reinforcement signal or the dopaminergic factor,
+                learning_rate - the learning rate,
+                w_rest - the resting values for the synaptic weights.
+            Default is the 'anti_hebbian' learning rule.
+        eligibility_trace : float, optional
+            the lambda parameter for the eligibility traces. The higher the lambda, the more the new responses will rely
+            on the previous ones.
+        sparseness : float, optional
+            the percentage of the number of KCs that needs to be active. Default is 3%.
+        """
+        if nb_sparse is not None:
+            kwargs['nb_hidden'] = nb_sparse
+        else:
+            kwargs.setdefault('nb_hidden', nb_input * 40)
+
+        super().__init__(nb_input=nb_input, nb_output=nb_output, learning_rule=learning_rule,
+                         eligibility_trace=eligibility_trace, *args, **kwargs)
+
+        self._ic = VectorMemoryMB(nb_cs=nb_input, nb_us=2, nb_kc=nb_sparse, learning_rule=learning_rule,
+                                  eligibility_trace=eligibility_trace, sparseness=sparseness,
+                                  cs_magnitude=1, us_magnitude=2, ltm_charging_speed=0.0005)
+
+        self.params.extend(self._ic.params)
+
+        # PN=.0: C=72.99 : 100% on (random), m_fam=<1%
+        # PN=.1: C=73.37 : 90% on, m_fam=<1%
+        # PN=.2: C=74.30 : 80% on, m_fam=<1%
+        # PN=.3: C=75.49 : 70% on, m_fam=1%
+        # PN=.4: C=77.31 : 60% on, m_fam=1.5%
+        # PN=.5: C=79.94 : 50% on, m_fam=1.5%
+        # PN=.6: C=82.50 : 40% on, m_fam=3%
+        # PN=.7: C=85.78 : 30% on, m_fam=10%
+        # PN=.8: C=90.23 : 20% on, m_fam=15%
+        # PN=.9: C=95.55 : 10% on, m_fam=80%
+        # PN=1.: C=72.97 : 0% on (random), m_fam=<1%
+        self._ic.f_cs = lambda x: np.asarray(
+            (x.T - x.min(axis=-1)) / (x.max(axis=-1) - x.min(axis=-1)), dtype=self.dtype).T
+        self._ic.f_kc = lambda x: np.asarray(
+            winner_takes_all(x, percentage=self.sparseness, noise=.01, normalise=False), dtype=self.dtype)
+        f_mbon = copy(self._ic.f_mbon)
+        self._ic.f_mbon = lambda x: np.asarray(f_mbon(x), dtype=self.dtype)
+
+        self.__s = True
+        self.__r = True
+        self.__m = True
+
+        self.__pos, self.__neg = [], []
+        if self.__s:
+            self.__pos.append([0])
+            self.__neg.append([1])
+        if self.__r:
+            self.__pos.append([2])
+            self.__neg.append([3])
+        if self.__m:
+            self.__pos.append([4])
+            self.__neg.append([5])
+
+    def reset(self):
+        """
+        Resets the synaptic weights and internal responses.
+        """
+        self._ic.reset()
+
+        super().reset()
+
+    def _fprop(self, inp=None, reinforcement=None):
+        """
+        Running the forward propagation.
+
+        Parameters
+        ----------
+        inp: np.ndarray[float]
+            The current input.
+        reinforcement: np.ndarray[float]
+            The current reinforcement.
+
+        Returns
+        -------
+        np.ndarray[float]
+            the novelty of the input element before the update
+        """
+        if inp is None:
+            inp = np.zeros_like(self._inp, dtype=self.dtype)
+        if reinforcement is None:
+            reinforcement = [0, 0]
+        elif isinstance(reinforcement, numbers.Number):
+            reinforcement = [reinforcement, 0]
+        elif len(reinforcement) < 2:
+            reinforcement = [reinforcement[0], 0]
+
+        inp = np.array(inp, dtype=self.dtype)
+        reinforcement = np.array(reinforcement, dtype=self.dtype)
+        if inp.ndim < 2:
+            inp = inp[np.newaxis, ...]
+
+        if self.update:
+            nb_repeats = 1
+        else:
+            nb_repeats = 1
+
+        for i in range(nb_repeats):
+            self._ic(cs=inp, us=reinforcement)
+
+        # print(self._ic.r_mbon[0], self._ic.r_dan[0])
+
+        self._inp = self._ic.r_cs[:1]
+        self._hid = self._ic.r_kc[:1]
+
+        self._out = np.clip(np.mean(self._ic.r_mbon[:1, self.__pos] - self._ic.r_mbon[:1, self.__neg], axis=1), -1, 1)
+        # self._out = np.absolute(self._out)
+
+        return self._out
+
+    def __repr__(self):
+        return "IncentiveCircuitMemory(in=%d, sparse=%d, out=%d, eligibility_trace=%.2f, plasticity='%s')" % (
+            self.nb_input, self.nb_sparse, self.nb_output, self._lambda, self.learning_rule
+        )
+
+    @property
+    def sparseness(self):
+        """
+        The sparseness of the KCs: the percentage of the KCs that are active in every time-step.
+        """
+        return self._ic.sparseness
+
+    @property
+    def nb_sparse(self):
+        """
+        The number of units in the sparse layer.
+        """
+        return self._ic.nb_kc
+
+    @property
+    def r_spr(self):
+        """
+        The responses of the sparse layer.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self.r_hid
+
+    @property
+    def w_i2s(self):
+        """
+        The input-to-sparse synaptc weights.
+        """
+        return self._ic.w_c2k
+
+    @w_i2s.setter
+    def w_i2s(self, v):
+        self._ic.w_c2k = v
+
+    @property
+    def w_s2o(self):
+        """
+        The sparse-to-output synaptic weights.
+        """
+        return self._ic.w_k2m
+
+    @w_s2o.setter
+    def w_s2o(self, v):
+        self._ic.w_k2m = v
+
+    @property
+    def w_rest(self):
+        return self._ic.w_rest
+
+    @property
+    def free_space(self):
+        """
+        Percentile of the  available space in the memory.
+
+        Returns
+        -------
+        float
+        """
+
+        ids = self.__pos + self.__neg
+        return np.clip(1 - np.absolute(self.w_s2o[:, ids] - self.w_rest[:, ids]), 0, 1).mean()
+
+    @property
+    def novelty(self):
+        return 1 - np.clip(self._out, 0, 1)
+
+    @property
+    def update(self):
+        return self._ic.update
+
+    @update.setter
+    def update(self, v):
+        self._ic.update = v
 
 
 class WillshawNetwork(MemoryComponent):
