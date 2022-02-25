@@ -16,127 +16,90 @@ __version__ = "v1.0.0-alpha"
 __maintainer__ = "Evripidis Gkanias"
 
 from invertpy.brain.component import Component
-from invertpy.brain.synapses import *
-from invertpy.brain.activation import sigmoid
-from ._helpers import tn_axes
+from invertpy.brain.synapses import chessboard_synapses
+
+from abc import ABC
 
 import numpy as np
 import os
 
+
 # get path of the script
 __root__ = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../.."))
 
-N_COLUMNS = 8
-x = np.linspace(0, 2 * np.pi, N_COLUMNS, endpoint=False)
 
-
-class CentralComplexBase(Component):
-    def __init__(self, nb_compass=8, nb_memory=16, nb_steering=16, *args, **kwargs):
+class CentralComplexBase(Component, ABC):
+    def __init__(self, nb_compass=8, nb_steering=16, *args, **kwargs):
         kwargs.setdefault('nb_input', nb_compass)
-        kwargs.setdefault("nb_output", 2)
+        kwargs.setdefault("nb_output", nb_steering)
         kwargs.setdefault('learning_rule', None)
         super().__init__(*args, **kwargs)
 
-        self._nb_compass = nb_compass  # TB1 / E-PG
-        self._nb_memory = nb_memory  # CPU4 / FBN
-        self._nb_steering = nb_steering  # CPU1 / PLF3
+        self._nb_com = nb_compass
+        self._nb_ste = nb_steering
 
-        self._w_c2c = uniform_synapses(self.nb_compass, self.nb_compass, fill_value=0, dtype=self.dtype)
-        self._w_c2m = uniform_synapses(self.nb_compass, self.nb_memory, fill_value=0, dtype=self.dtype)
-        self._w_c2s = uniform_synapses(self.nb_compass, self.nb_steering, fill_value=0, dtype=self.dtype)
-        self._w_m2s = uniform_synapses(self.nb_memory, self.nb_steering, fill_value=0, dtype=self.dtype)
-        self._w_s2o = uniform_synapses(self.nb_steering, self._nb_output, fill_value=0, dtype=self.dtype)
+        self.__layers = dict()
 
-        self._com = np.zeros(self._nb_compass, dtype=self.dtype)
-        self._mem = np.zeros(self._nb_memory, dtype=self.dtype)
-        self._ste = np.zeros(self._nb_steering, dtype=self.dtype)
-        self._out = np.zeros(self._nb_output, dtype=self.dtype)
-
-        # The cell properties (for sigmoid function)
-        self._com_slope = 5.0
-        self._mem_slope = 5.0
-        self._ste_slope = 5.0  # 7.5
-        self._out_slope = 1.0
-
-        self._b_com = 0.0
-        self._b_mem = 2.5
-        self._b_ste = 2.5  # -1.0
-        self._b_out = 3.0
-
-        self.params.extend([
-            self._w_c2c,
-            self._w_c2m,
-            self._w_c2s,
-            self._w_m2s,
-            self._w_s2o,
-            self._b_com,
-            self._b_mem,
-            self._b_ste,
-            self._b_out
-        ])
-
-        self.f_com = lambda v: sigmoid(v * self._com_slope - self._b_com, noise=self._noise, rng=self.rng)
-        self.f_mem = lambda v: sigmoid(v * self._mem_slope - self._b_mem, noise=self._noise, rng=self.rng)
-        self.f_ste = lambda v: sigmoid(v * self._ste_slope - self._b_ste, noise=self._noise, rng=self.rng)
-        self.f_out = lambda v: sigmoid(v * self._out_slope - self._b_out, noise=self._noise, rng=self.rng)
+        w = chessboard_synapses(self._nb_ste, 2, nb_rows=2, nb_cols=2, fill_value=1, dtype=self.dtype)
+        a = np.vstack([w[:14//2], w[-14//2:]])
+        b = w[[-14//2-1, 14//2]]
+        self._w_s2o = np.vstack([b[-1:], a, b[:1]])
 
     def reset(self):
-
-        self._w_c2c[:] = sinusoidal_synapses(self.nb_compass, self.nb_compass, fill_value=-1, dtype=self.dtype)
-        self._w_c2m[:] = diagonal_synapses(self.nb_compass, self.nb_memory, fill_value=-1, tile=True, dtype=self.dtype)
-        self._w_c2s[:] = diagonal_synapses(self.nb_compass, self.nb_steering, fill_value=-1, tile=True)
-        self._w_m2s[:] = opposing_synapses(self.nb_memory, self.nb_steering, fill_value=1, dtype=self.dtype)
-
-        self._w_s2o = chessboard_synapses(self.nb_steering, self._nb_output,
-                                          nb_rows=2, nb_cols=2, fill_value=1, dtype=self.dtype)
-
-        self._com[:] = 0.
-        self._mem[:] = 0.
-        self._ste[:] = 0.
-        self._out[:] = 0.
+        for name, layer in self.__layers.items():
+            layer.reset()
 
         self.update = True
 
-    @property
-    def w_c2c(self):
-        return self._w_c2c
+    def __getitem__(self, layer_name):
+        """
+        Gets a layer given the name.
+
+        Parameters
+        ----------
+        layer_name : str
+
+        Returns
+        -------
+        CentralComplexLayer
+        """
+        return self.__layers[layer_name]
+
+    def __setitem__(self, layer_name, layer):
+        """
+        Sets a layer with the specified name.
+
+        Parameters
+        ----------
+        layer_name : str
+        layer : CentralComplexLayer
+        """
+        self.__layers[layer_name] = layer
 
     @property
-    def w_c2m(self):
-        return self._w_c2m
-
-    @property
-    def w_c2s(self):
-        return self._w_c2s
-
-    @property
-    def w_m2s(self):
-        return self._w_m2s
-
-    @property
-    def w_s2o(self):
+    def w_steering2motor(self):
         return self._w_s2o
 
     @property
     def r_compass(self):
-        return self._com
-
-    @property
-    def r_memory(self):
-        return self._mem
+        raise NotImplementedError()
 
     @property
     def r_steering(self):
-        return self._ste
+        raise NotImplementedError()
+
+    @property
+    def r_motor(self):
+        return self.r_steering.dot(self.w_steering2motor)
 
     @property
     def nb_compass(self):
-        return self._nb_compass
-
-    @property
-    def nb_memory(self):
-        return self._nb_memory
+        return self._nb_com
 
     @property
     def nb_steering(self):
-        return self._nb_steering
+        return self._nb_ste
+
+
+class CentralComplexLayer(Component, ABC):
+    pass

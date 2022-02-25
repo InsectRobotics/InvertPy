@@ -19,16 +19,8 @@ from invertpy.brain.synapses import *
 from invertpy.brain.activation import sigmoid
 
 from .stone import StoneCX
-from ._helpers import tn_axes
 
 import numpy as np
-import os
-
-# get path of the script
-__root__ = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../.."))
-
-N_COLUMNS = 16
-x = np.linspace(0, 2 * np.pi, N_COLUMNS, endpoint=False)
 
 
 class PisokasCX(StoneCX):
@@ -293,11 +285,7 @@ class PisokasCX(StoneCX):
                f"CPU4={self.nb_cpu4:d}, " \
                f"CPU1={self.nb_cpu1:d}, " \
                f"TN1={self.nb_tn1:d}, " \
-               f"TN2={self.nb_tn2:d}" \
-               f"{', Pontine=True' if self.pontine else ''}{', holonomic=True' if self.holonomic else ''})"
-
-    def reset_integrator(self):
-        self.__cpu4[:] = .5
+               f"TN2={self.nb_tn2:d})"
 
     @property
     def w_delta72delta7(self):

@@ -24,7 +24,7 @@ import warnings
 
 class Component(object):
 
-    def __init__(self, nb_input, nb_output, nb_repeats=1, repeat_rate=None, learning_rule=dopaminergic, dims=1,
+    def __init__(self, nb_input, nb_output, nb_repeats=1, repeat_rate=None, learning_rule=dopaminergic, ndim=1,
                  eligibility_trace=0., noise=0., rng=RNG, dtype=np.float32):
         """
         Abstract class of a brain component that implements its basic functions and sets the abstract methods that need
@@ -50,7 +50,7 @@ class Component(object):
                 rein - the reinforcement signal or the dopaminergic factor,
                 learning_rate - the learning rate,
                 w_rest - the resting values for the synaptic weights.
-        dims: int, optional
+        ndim: int, optional
             The number of dimensions per neuron. Default is 1.
         eligibility_trace: float, optional
             The lambda parameter for the eligibility traces. The higher the lambda, the more the new responses will rely
@@ -71,7 +71,7 @@ class Component(object):
         self._learning_rule = learning_rule if callable(learning_rule) else get_learning_rule(learning_rule)
         self.__update = False
         self._nb_input = nb_input
-        self._neuron_dims = dims
+        self._ndim = ndim
         self._nb_output = nb_output
         self._repeats = nb_repeats
         self._noise = noise
@@ -144,7 +144,7 @@ class Component(object):
         return component
 
     def __repr__(self):
-        return "Component(in=%d, out=%d, lr='%s')" % (self._nb_input, self._nb_output, self.learning_rule)
+        return f"Component(in={self._nb_input}, out={self._nb_output}, lr='{self.learning_rule}')"
 
     def update_values(self, v, v_pre=None, eta=None):
         """
@@ -220,7 +220,10 @@ class Component(object):
         -------
         str
         """
-        return self._learning_rule.__name__
+        if self._learning_rule is None:
+            return 'None'
+        else:
+            return self._learning_rule.__name__
 
     @property
     def update(self):
@@ -259,7 +262,7 @@ class Component(object):
         return self._repeats
 
     @property
-    def neuron_dims(self):
+    def ndim(self):
         """
         The number of dimension of the neural values.
 
@@ -267,4 +270,4 @@ class Component(object):
         -------
         int
         """
-        return self._neuron_dims
+        return self._ndim

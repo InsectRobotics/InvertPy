@@ -211,17 +211,18 @@ class Whitening(Preprocessing):
             the samples from which the whitening synaptic weights will be created. Default is None
         """
 
-        if samples is None:
+        w, m = None, None
+        if samples is None and self._is_calibrated is None:
             w = np.eye(self._nb_input, self._nb_output, dtype=self.dtype)
             m = np.zeros(self._nb_input, dtype=self.dtype)
             self._is_calibrated = False
-        else:
+        elif samples is not None:
             w, m = whitening_synapses(samples, nb_out=self.nb_output, w_func=self._w_method, dtype=self.dtype, bias=True)
             self._is_calibrated = True
 
         if self._w_white is None or self._m_white is None:
             self._w_white, self._m_white = w, m
-        else:
+        elif w is not None and m is not None:
             self._w_white[:], self._m_white[:] = w[:], m[:]
 
     def _fprop(self, x):
