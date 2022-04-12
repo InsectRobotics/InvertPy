@@ -40,7 +40,7 @@ class Compass(Component):
 class CelestialCompass(Compass):
 
     def __init__(self, nb_pol, loc_ori, nb_sol=8, nb_tcl=None, sigma=13, shift=40, dt=2./60, degrees=True,
-                 integrated=False, has_pol=True, has_sun=True, has_circadian=False, *args, **kwargs):
+                 integrated=False, has_pol=True, has_sun=True, has_circadian=False, nb_receptors=2, *args, **kwargs):
         """
         The Celestial Compass integrated a polarisation compass and a sky gradient compass presented in [1]_.
 
@@ -55,6 +55,8 @@ class CelestialCompass(Compass):
             the number of SOL (direction relative to the sun) units.
         nb_tcl: int, optional
             the number of TCL (direction relative to North) units.
+        nb_receptors: int, optional
+            the number of photo-receptors per ommatidium.
         sigma: float, optional
             the angular thickness of the tilt compensation gate function's ring.
         shift: float, optional
@@ -110,6 +112,7 @@ class CelestialCompass(Compass):
         self._nb_pol = nb_pol
         self._nb_sol = nb_sol
         self._nb_tcl = nb_tcl
+        self._nb_rec = nb_receptors
 
         self._has_circadian = has_circadian
         self._has_pol = has_pol
@@ -142,7 +145,7 @@ class CelestialCompass(Compass):
 
     def _fprop(self, r_pol: np.ndarray = None, r: np.ndarray = None, glob_ori: R = None, ori: R = None):
         if self.has_pol and r_pol is None and r is not None:
-            r_pol = photoreceptor2pol(r, ori=self._loc_ori).reshape(-1)
+            r_pol = photoreceptor2pol(r, ori=self._loc_ori, nb_receptors=self._nb_rec).reshape(-1)
         elif r_pol is None:
             r_pol = np.zeros(self._nb_pol)
         else:
@@ -474,7 +477,7 @@ class SolarCompass(CelestialCompass):
         super().__init__(*args, **kwargs)
 
 
-def photoreceptor2pol(r, ori=None, ori_cross=None, dtype='float32'):
+def photoreceptor2pol(r, ori=None, ori_cross=None, nb_receptors=2, dtype='float32'):
     """
     Transforms the input from the photo-receptors into POL neurons responses.
 
@@ -486,6 +489,8 @@ def photoreceptor2pol(r, ori=None, ori_cross=None, dtype='float32'):
         the orientation of the ommatidia.
     ori_cross: np.ndarray, optional
         the angle of preference for each photo-receptor with respect to the orientation of each ommatidium
+    nb_receptors: int, list, np.ndarray
+        the number of photo-receptors per ommatidium.
     dtype: np.dtype, optional
         the type of the data
 
@@ -494,12 +499,12 @@ def photoreceptor2pol(r, ori=None, ori_cross=None, dtype='float32'):
     r_pol: np.ndarray
         the responses of the POL units.
     """
-    r_op = photoreceptor2opponent(r, ori=ori, ori_cross=ori_cross, dtype=dtype)
+    r_op = photoreceptor2opponent(r, ori=ori, ori_cross=ori_cross, nb_receptors=nb_receptors, dtype=dtype)
     r_po = photoreceptor2pooling(r)
     return r_op / (r_po + eps)
 
 
-def photoreceptor2opponent(r, ori=None, ori_cross=None, dtype='float32'):
+def photoreceptor2opponent(r, ori=None, ori_cross=None, nb_receptors=2, dtype='float32'):
     """
     Transforms the input from the photo-receptors into opponent (OP) neurons responses.
 
@@ -511,6 +516,8 @@ def photoreceptor2opponent(r, ori=None, ori_cross=None, dtype='float32'):
         the orientation of the ommatidia.
     ori_cross: np.ndarray, optional
         the angle of preference for each photo-receptor with respect to the orientation of each ommatidium
+    nb_receptors: int, list, np.ndarray
+        the number of photo-receptors per ommatidium.
     dtype: np.dtype, optional
         the type of the data
 
@@ -522,7 +529,7 @@ def photoreceptor2opponent(r, ori=None, ori_cross=None, dtype='float32'):
     if ori is None and ori_cross is None:
         return np.sum(r, axis=1)
     elif ori_cross is None:
-        ori_cross = ori2cross(np.shape(ori)[0], nb_receptors=2, dtype=dtype)
+        ori_cross = ori2cross(np.shape(ori)[0], nb_receptors=nb_receptors, dtype=dtype)
     return np.sum(np.cos(2 * ori_cross) * r, axis=1)
 
 
@@ -551,7 +558,7 @@ def ori2cross(nb_ommatidia, nb_receptors=2, dtype='float32'):
     ----------
     nb_ommatidia: int
         the number of ommatidia.
-    nb_receptors: int, optional
+    nb_receptors: int, list, np.ndarray
         the number of photo-receptors per ommatidium.
     dtype: np.dtype, optional
         the data type.
@@ -561,9 +568,13 @@ def ori2cross(nb_ommatidia, nb_receptors=2, dtype='float32'):
     ori_cross: np.ndarray
         the cross directions for the different photo-receptors of each ommatidium.
     """
-    ori_cross = np.zeros((nb_ommatidia, nb_receptors), dtype=dtype)
-    for i in range(1, nb_receptors):
-        ori_cross[..., i] = np.pi / float(nb_receptors)
+    if isinstance(nb_receptors, int):
+        nb_receptors = np.linspace(0, np.pi, nb_receptors, endpoint=False)
+    else:
+        nb_receptors = np.array(nb_receptors)
+    ori_cross = np.zeros((nb_ommatidia, len(nb_receptors)), dtype=dtype)
+    for i, angle in enumerate(nb_receptors):
+        ori_cross[..., i] = angle
 
     return ori_cross
 
