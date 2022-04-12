@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+##! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
 from invertpy.sense.polarisation import PolarisationSensor
@@ -22,13 +22,13 @@ def main(*args):
     rgb[:, [0, 2]] += hue[..., 4:5] / 2
     rgb[:, 0] += hue[..., 0]
     plt.subplot(111, polar=False)
-    mask = compass.omm_xyz[:, 2] < 0
+    mask = compass.omm_xyz[:, 2] > 0
     plt.scatter(compass.omm_xyz[mask, 0],
                 compass.omm_xyz[mask, 1],
                 s=20,
                 c=np.clip(rgb[mask, :], 0, 1))
-    plt.ylim([-1.1, 1.1])
-    plt.xlim([-1.1, 1.1])
+    # plt.ylim([-1.1, 1.1])
+    # plt.xlim([-1.1, 1.1])
     plt.show()
 
 

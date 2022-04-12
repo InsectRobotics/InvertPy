@@ -253,9 +253,9 @@ class CompoundEye(Sensor):
         return self._r
 
     def __repr__(self):
-        return ("CompoundEye(ommatidia=%d, responses=(%d, %d), "
+        return ("CompoundEye(ommatidia=%d, responses=(%d, %d), pr_angles=%d, "
                 "pos=(%.2f, %.2f, %.2f), ori=(%.0f, %.0f, %.0f), name='%s')") % (
-            self.nb_ommatidia, self._nb_output[0], self._nb_output[1],
+            self.nb_ommatidia, self._nb_output[0], self._nb_output[1], len(self._phot_angle),
             self.x, self.y, self.z, self.yaw_deg, self.pitch_deg, self.roll_deg, self.name
         )
 
