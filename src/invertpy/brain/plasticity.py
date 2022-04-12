@@ -29,8 +29,7 @@ import numpy as np
 __init_dir__ = set(dir()) | {'__init_dir__'}
 
 
-def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.,
-                 binary_pre=True, passive_effect=1e-04):
+def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1., binary_pre=True, rho=1e-01):
     """
     The dopaminergic learning rule introduced in Gkanias et al (2021). Reinforcement here is assumed to be the
     dopaminergic factor.
@@ -59,7 +58,7 @@ def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.,
         the resting value for the synaptic weights.
     binary_pre : bool, optional
         if True, the r_pre becomes binary. Default is True
-    passive_effect : bool, float
+    rho : bool, float
         If True, the passive effect is enabled.
         If False, the passive effect is disabled.
         If float, the passive effect is multiplied with this float.
@@ -80,7 +79,7 @@ def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.,
     if binary_pre:
         r_pre = np.array(np.greater(r_pre, 0), dtype=r_pre.dtype)
 
-    d_w = learning_rate * dop_fact * leaky_relu(r_pre + w - w_rest, leak=float(passive_effect))
+    d_w = learning_rate * dop_fact * (r_pre + rho * (w - w_rest))
     if d_w.ndim > 2:
         d_w = d_w.sum(axis=0)
     return w + d_w
