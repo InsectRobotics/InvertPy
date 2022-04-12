@@ -81,10 +81,10 @@ class PolarisationSensor(CompoundEye):
         return np.asarray(photoreceptor2pol(r, ori=self.omm_ori, dtype=self.dtype).reshape((-1, 1)), dtype=self.dtype)
 
     def __repr__(self):
-        return ("PolarisationSensor(ommatidia=%d, FOV=%.0f, responses=(%d, %d), "
+        return ("PolarisationSensor(ommatidia=%d, FOV=%.0f, responses=(%d, %d), pr_angles=%d, "
                 "pos=(%.2f, %.2f, %.2f), ori=(%.2f, %.2f, %.2f), name='%s')") % (
             self.nb_ommatidia, np.rad2deg(self.field_of_view), self._nb_output[0], self._nb_output[1],
-            self.x, self.y, self.z, self.yaw_deg, self.pitch_deg, self.roll_deg, self.name
+            len(self._phot_angle), self.x, self.y, self.z, self.yaw_deg, self.pitch_deg, self.roll_deg, self.name
         )
 
     @property
