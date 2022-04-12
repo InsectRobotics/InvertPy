@@ -160,14 +160,18 @@ class MushroomBody(MemoryComponent):
         self.w_d2m = diagonal_synapses(self.nb_dan, self.nb_mbon, fill_value=-1, dtype=self.dtype)
         self.w_rest = uniform_synapses(self.nb_kc, self.nb_mbon, fill_value=1, dtype=self.dtype)
 
+        self.reset_responses()
+
+        self.update = True
+
+    def reset_responses(self):
+
         # reset responses
         self._inp = np.zeros((self._repeats, self.ndim, self.nb_input), dtype=self.dtype)
         self._dan = np.zeros((self._repeats, self.ndim, self.nb_dan), dtype=self.dtype)
         self._hid = np.zeros((self._repeats, self.ndim, self.nb_hidden), dtype=self.dtype)
         self._apl = np.zeros((self._repeats, self.ndim, self.nb_apl), dtype=self.dtype)
         self._out = np.zeros((self._repeats, self.ndim, self.nb_output), dtype=self.dtype)
-
-        self.update = True
 
     def get_response(self, neuron_name, all_repeats=False):
         """
