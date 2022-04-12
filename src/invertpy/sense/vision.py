@@ -24,7 +24,7 @@ import numpy as np
 
 class CompoundEye(Sensor):
     def __init__(self, omm_xyz=None, omm_ori=None, omm_rho=None, omm_pol_op=None, omm_res=None, c_sensitive=None,
-                 *args, **kwargs):
+                 omm_photoreceptor_angle=2, *args, **kwargs):
         """
         The CompoundEye class is a representation of the insect compound eye as a simple sensor. It can have multiple
         ommatidia (multi-dimensional photo-receptors) that are distributed in eye, are pointing in different directions
@@ -51,6 +51,10 @@ class CompoundEye(Sensor):
             is assigned to all the ommatidia. Default is 0.
         c_sensitive: tuple, list, np.ndarray
             The IRGBU colour code that the eyes are sensitive to (infrared, red, green, blue, ultraviolet)
+        omm_photoreceptor_angle: int, list, np.ndarray
+            The angle of each photoreceptor with respect to the direction of their respective ommatidium. If int, a
+            homogeneously distributed array of the defined number of angles will be created. Default is 2 (one at 0 and
+            one at 90 degrees).
         """
         if omm_pol_op is None or isinstance(omm_pol_op, float) or isinstance(omm_pol_op, int):
             nb_output = None
@@ -114,12 +118,18 @@ class CompoundEye(Sensor):
             c_sensitive = c_sensitive[np.newaxis, ...]
         c_sensitive /= np.maximum(c_sensitive.sum(axis=1), eps)[..., np.newaxis]
 
+        if isinstance(omm_photoreceptor_angle, int):
+            omm_photoreceptor_angle = np.linspace(0, np.pi, omm_photoreceptor_angle, endpoint=False)
+        else:
+            omm_photoreceptor_angle = np.array(omm_photoreceptor_angle)
+
         self._omm_ori = omm_ori
         self._omm_xyz = omm_xyz
         self._omm_pol = omm_pol_op
         self._omm_rho = omm_rho
         self._omm_res = omm_res
         self._omm_area = None
+        self._phot_angle = omm_photoreceptor_angle
         # contribution of each six points on the edges of the ommatidia
         # (sigma/2 distance from the centre of the Gaussian)
         # self._nb_gau = (np.nanmax(self._omm_rho) // np.rad2deg(10) + 1) * 6
@@ -228,8 +238,9 @@ class CompoundEye(Sensor):
         # apply the opponent polarisation filters
         op = self._omm_pol.reshape((-1, 1))
         pol_main = (self._ori * self.omm_ori).as_euler('ZYX', degrees=False)[..., 0].reshape((-1, 1))
-        ori_op = np.zeros((np.shape(self.omm_ori)[0], 2), dtype=self.dtype)
-        ori_op[..., 1] = np.pi/2
+        ori_op = (np.zeros((np.shape(self.omm_ori)[0], len(self._phot_angle)), dtype=self.dtype) +
+                  self._phot_angle[np.newaxis, :])
+        # ori_op[..., 1] = np.pi/2
 
         # calculate the responses for the 2 opponent photo-receptors
         s = y0 * ((np.square(np.sin(a0 - pol_main + ori_op)) +
