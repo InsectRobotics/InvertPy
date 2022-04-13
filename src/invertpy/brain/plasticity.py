@@ -22,12 +22,14 @@ __license__ = "MIT"
 __version__ = "v1.0.0-alpha"
 __maintainer__ = "Evripidis Gkanias"
 
+from .activation import leaky_relu
+
 import numpy as np
 
 __init_dir__ = set(dir()) | {'__init_dir__'}
 
 
-def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
+def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1., binary_pre=True, rho=1e-01):
     """
     The dopaminergic learning rule introduced in Gkanias et al (2021). Reinforcement here is assumed to be the
     dopaminergic factor.
@@ -42,18 +44,25 @@ def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
 
     Parameters
     ----------
-    w: np.ndarray
+    w: np.ndarray[float]
         the current synaptic weights.
-    r_pre: np.ndarray
+    r_pre: np.ndarray[float]
         the pre-synaptic responses.
-    r_post: np.ndarray
+    r_post: np.ndarray[float]
         the post-synaptic responses.
-    rein: np.ndarray
+    rein: np.ndarray[float]
         the dopaminergic factor.
     learning_rate: float, optional
         the learning rate.
-    w_rest: np.ndarray | float
+    w_rest: np.ndarray[float] | float
         the resting value for the synaptic weights.
+    binary_pre : bool, optional
+        if True, the r_pre becomes binary. Default is True
+    rho : bool, float
+        If True, the passive effect is enabled.
+        If False, the passive effect is disabled.
+        If float, the passive effect is multiplied with this float.
+        Default is 0.1
 
     Returns
     -------
@@ -65,7 +74,12 @@ def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     else:
         dop_fact = rein[np.newaxis, ...]
     r_pre = r_pre[..., np.newaxis]
-    d_w = learning_rate * dop_fact * (r_pre + w - w_rest)
+
+    # transform the pre-synaptic responses to binary: 1 if r_pre > 0, 0 otherwise
+    if binary_pre:
+        r_pre = np.array(np.greater(r_pre, 0), dtype=r_pre.dtype)
+
+    d_w = learning_rate * dop_fact * (r_pre + rho * (w - w_rest))
     if d_w.ndim > 2:
         d_w = d_w.sum(axis=0)
     return w + d_w
@@ -206,13 +220,9 @@ def anti_hebbian(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     .. [1] Smith, D., Wessnitzer, J. & Webb, B. A model of associative learning in the mushroom body. Biol Cybern 99,
        89–103 (2008).
     """
-    if rein.ndim > 1:
-        rein = rein[:, np.newaxis, ...]
-    else:
-        rein = rein[np.newaxis, ...]
-    rein = np.maximum(rein, 0)
+    # rein = np.maximum(rein, 0)
     r_pre = r_pre[..., np.newaxis]
-    d_w = learning_rate * (-rein * (r_pre * w) + w_rest)
+    d_w = learning_rate * np.tensordot(-rein, r_pre * w, axes=(0, 0))
     if d_w.ndim > 2:
         d_w = d_w.sum(axis=0)
     return w + d_w
@@ -254,7 +264,16 @@ def infomax(w, r_pre, r_post, rein, learning_rate=1., w_rest=1.):
     .. [2] Baddeley, B., Graham, P., Husbands, P. & Philippides, A. A Model of Ant Route Navigation Driven by Scene
     Familiarity. Plos Comput Biol 8, e1002336 (2012).
     """
-    d_w = learning_rate * (w - (r_post + r_pre) * np.dot(r_pre, w))
+    r_post = r_post[..., np.newaxis]
+    y = np.tanh(r_post)
+    n = float(r_pre.shape[-1])
+    # W = W + mu / P * (eye(H) - (g + u) * u') * W;
+    # d_w = learning_rate / n * (w - ((y + r_post) * np.dot(w, r_post).T).T)
+
+    outer = np.tensordot(y + r_post, r_post, axes=(2, 2))
+    outer = outer[np.arange(outer.shape[0]), :, np.arange(outer.shape[0])]
+    d_w = learning_rate / n * (
+            np.eye(w.shape[0]) - np.tensordot(rein, np.tensordot(outer, w, axes=(-1, 0)), axes=(0, 0)))
 
     return w + d_w
 

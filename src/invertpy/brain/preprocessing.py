@@ -17,8 +17,7 @@ from invertpy.sense import CompoundEye
 
 from .component import Component
 from .synapses import whitening_synapses, dct_synapses, mental_rotation_synapses
-from .activation import softmax
-from ._helpers import whitening, pca, eps
+from ._helpers import whitening, pca, zca, eps
 
 from abc import ABC
 from math import factorial
@@ -55,6 +54,110 @@ class Preprocessing(Component, ABC):
         return self._nb_output
 
 
+class LateralInhibition(Preprocessing):
+
+    def __init__(self, ori, nb_neighbours=6, *args, **kwargs):
+        """
+        A preprocessing component that computes the edges of the input spherical 'image' using lateral inhibition.
+
+        In lateral inhibition, each output neuron is excited by its respective ommatidium and inhibited by its
+        neightbours.
+
+        Parameters
+        ----------
+        ori : Rotation
+            the relative orientation of the ommatidia of interest
+        nb_neighbours : int
+            the number of neighbours to be inhibited from. Default is 6
+        """
+        kwargs.setdefault("nb_input", np.shape(ori)[0])
+        kwargs.setdefault("nb_output", np.shape(ori)[0])
+        super().__init__(*args, **kwargs)
+
+        self._xyz = ori.apply([1, 0, 0])
+        self._xyz = self._xyz / np.linalg.norm(self._xyz, axis=-1)[:, np.newaxis]
+
+        self._nb_neighbours = nb_neighbours
+
+        self._w = np.zeros((self._nb_input, self._nb_output), dtype=self.dtype)
+
+        self._f_li = lambda x: np.clip(x, 0, 1)
+
+        self.reset()
+
+    def reset(self, *args):
+        """
+        Resets the ZM parameters.
+        """
+        c = np.clip(np.dot(self._xyz, self._xyz.T), -1, 1)
+        d = np.arccos(c)  # angular distance between vectors
+        w = np.zeros_like(self._w)
+
+        i = np.argsort(d, axis=1)[:, :self._nb_neighbours+1]
+
+        w[i[:, 0], np.arange(w.shape[1])] = float(self._nb_neighbours)
+        for j in range(self._nb_neighbours):
+            w[i[:, j + 1], np.arange(w.shape[1])] = -1
+
+        # # the synaptic weights could be calculated using the second derivative of the Gaussian function
+        # # (Ricker or Mexican hat wavelet)
+        # r = 2 * d[~np.isclose(d, 0)].min()
+        # z = 2 / np.sqrt(3 * r) * np.power(np.pi, 1 / 4)
+        # w = z * (1 - np.square(d / r)) * np.exp(-np.square(d) / (2 * np.square(r)))
+        # w[w > 0] *= 10 * (-w[w < 0]).sum(axis=1) / w[w > 0].sum(axis=1)
+        # w[w < 0] *= 10 * (-w[w > 0]).sum(axis=1) / w[w < 0].sum(axis=1)
+
+        self._w = w
+
+    def _fprop(self, x):
+        """
+        Transform the input signal to its edges.
+
+        Parameters
+        ----------
+        x: np.ndarray[float]
+            the raw signal that needs to be transformed
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._f_li(x.dot(self._w))
+
+    @property
+    def w(self):
+        """
+        The transformation weights.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._w
+
+    @property
+    def centres(self):
+        """
+        The normalised 3D positions of the ommatidia.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._xyz
+
+    @property
+    def nb_neighbours(self):
+        """
+        The number of neighbours that each ommatidium is inhibited from.
+
+        Returns
+        -------
+        int
+        """
+        return self._nb_neighbours
+
+
 class Whitening(Preprocessing):
     def __init__(self, *args, samples=None, w_method=pca, **kwargs):
         """
@@ -80,7 +183,7 @@ class Whitening(Preprocessing):
         """
         Whitening mean.
         """
-        self._f_white = lambda x: softmax((x - x.min()) / (x.max() - x.min() + eps), tau=.2, axis=0)
+        self._f_white = lambda x: ((x.T - x.min(axis=-1)) / (x.max(axis=-1) - x.min(axis=-1) + eps)).T
         """
         Activation function after whitening.
         """
@@ -108,17 +211,18 @@ class Whitening(Preprocessing):
             the samples from which the whitening synaptic weights will be created. Default is None
         """
 
-        if samples is None:
+        w, m = None, None
+        if samples is None and self._is_calibrated is None:
             w = np.eye(self._nb_input, self._nb_output, dtype=self.dtype)
             m = np.zeros(self._nb_input, dtype=self.dtype)
             self._is_calibrated = False
-        else:
-            w, m = whitening_synapses(samples, w_func=self._w_method, dtype=self.dtype, bias=True)
+        elif samples is not None:
+            w, m = whitening_synapses(samples, nb_out=self.nb_output, w_func=self._w_method, dtype=self.dtype, bias=True)
             self._is_calibrated = True
 
         if self._w_white is None or self._m_white is None:
             self._w_white, self._m_white = w, m
-        else:
+        elif w is not None and m is not None:
             self._w_white[:], self._m_white[:] = w[:], m[:]
 
     def _fprop(self, x):
@@ -135,7 +239,7 @@ class Whitening(Preprocessing):
         np.ndarray[float]
             the whitened signal
         """
-        return self._f_white(whitening(x, self._w_white, self._m_white))
+        return self._f_white(whitening(x, w=self._w_white, m=self._m_white))
 
     @property
     def calibrated(self):
@@ -284,10 +388,7 @@ class ZernikeMoments(Preprocessing):
             defines if the input and output angles will be in degrees or not. Default is False
         """
         kwargs.setdefault("nb_input", np.shape(ori)[0])
-        if order % 2:
-            nb_coeff = int(((1 + order) / 2) * ((3 + order) / 2))
-        else:
-            nb_coeff = int(np.square(order / 2. + 1))
+        nb_coeff = self.get_nb_coeff(order)
         kwargs.setdefault("nb_output", nb_coeff)
         super().__init__(*args, **kwargs)
 
@@ -339,7 +440,7 @@ class ZernikeMoments(Preprocessing):
 
         self.reset()
 
-    def reset(self):
+    def reset(self, *args):
         """
         Resets the ZM parameters.
         """
@@ -403,7 +504,7 @@ class ZernikeMoments(Preprocessing):
         Z = self.zernike_poly(self._rho, self._phi, order, repeat)
 
         # calculate the moments
-        z = x @ Z
+        z = np.dot(x, Z)
 
         # normalize the amplitude of moments
         z = (self._n + 1) * z / self.__cnt
@@ -544,6 +645,14 @@ class ZernikeMoments(Preprocessing):
             self._nb_input, self._nb_output, self._out_type, self.order, self.calibrated
         )
 
+    @staticmethod
+    def get_nb_coeff(order):
+        if order % 2:
+            nb_coeff = int(((1 + order) / 2) * ((3 + order) / 2))
+        else:
+            nb_coeff = int(np.square(order / 2. + 1))
+        return nb_coeff
+
 
 class MentalRotation(Preprocessing):
     def __init__(self, *args, nb_input=None, nb_output=8, eye=None, pref_angles=None, sigma=.02, **kwargs):
@@ -572,6 +681,8 @@ class MentalRotation(Preprocessing):
             "You should specify the input either by the 'nb_input' or the 'eye' attribute.")
         if eye is not None:
             nb_input = eye.nb_ommatidia
+        if pref_angles is not None:
+            nb_output = len(pref_angles)
         super().__init__(*args, nb_input=nb_input, nb_output=nb_output, **kwargs)
 
         self._w_rot = np.zeros((nb_input, nb_input, nb_output))

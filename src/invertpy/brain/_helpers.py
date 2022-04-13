@@ -7,43 +7,55 @@ from invertpy.__helpers import *
 import numpy as np
 
 
-def svd2pca(U, S, V, epsilon=10e-5):
+def svd2pca(U, S, V, epsilon=1e-5):
     """
     Creates the PCA transformation matrix using the SVD.
 
     Parameters
     ----------
-    U: np.ndarray
-    S: np.ndarray
-    V: np.ndarray
+    U: np.ndarray[float]
+    S: np.ndarray[float]
+    V: np.ndarray[float]
     epsilon: float, optional
 
     Returns
     -------
-
+    np.ndarray[float]
     """
-    return (np.diag(1. / np.sqrt(S + epsilon))).dot(U.T)
+    D = np.diag(np.sqrt(S + epsilon))
+    return U.dot(np.linalg.inv(D))
 
 
-def svd2zca(U, S, V, epsilon=10e-5):
+def svd2zca(U, S, V, epsilon=1e-5):
     """
     Creates the ZCA transformation matrix using the SVD.
 
     Parameters
     ----------
-    U: np.ndarray
-    S: np.ndarray
-    V: np.ndarray
+    U: np.ndarray[float]
+    S: np.ndarray[float]
+    V: np.ndarray[float]
     epsilon: float, optional
 
     Returns
     -------
-
+    np.ndarray[float]
     """
-    return U.dot(np.diag(1. / np.sqrt(S + epsilon))).dot(U.T)
+    D = np.diag(np.sqrt(S + epsilon))
+    return U.dot(np.linalg.inv(D)).dot(U.T)
 
 
-def build_kernel(x, svd2ker, m=None, epsilon=10e-5, dtype='float32'):
+def eig2pca(E, V, epsilon=1e-5):
+    D = np.diag(np.sqrt(V + epsilon))
+    return E.dot(np.linalg.inv(D))
+
+
+def eig2zca(E, V, epsilon=1e-5):
+    D = np.diag(np.sqrt(V + epsilon))
+    return E.dot(np.linalg.inv(D)).dot(E.T)
+
+
+def build_kernel(x, nb_out=None, svd2ker=None, eig2ker=None, m=None, epsilon=1e-5, dtype='float32'):
     """
     Creates the transformation matrix of a dataset x using the given kernel function.
 
@@ -51,6 +63,7 @@ def build_kernel(x, svd2ker, m=None, epsilon=10e-5, dtype='float32'):
     ----------
     x: np.ndarray
     svd2ker: callable
+    eig2ker: callable
     m: np.ndarray, optional
     epsilon: float, optional
         the smoothing parameter of the data
@@ -65,29 +78,45 @@ def build_kernel(x, svd2ker, m=None, epsilon=10e-5, dtype='float32'):
     # reshape the matrix in n x d, where:
     # - n: number of instances
     # - d: number of features
-
     x_flat = np.reshape(x, (shape[0], -1))
-    n, d = np.shape(x_flat)
+    n, d = x_flat.shape
+    if nb_out is None:
+        nb_out = n
 
     # subtract the mean value from the data
     if m is None:
         m = np.mean(x_flat, axis=0)
 
-    x_flat = x_flat - m
+    x_mean = x_flat - m
 
     # compute the correlation matrix
-    C = np.dot(np.transpose(x_flat), x_flat) / n
+    C = np.cov(x_mean, rowvar=False)
+    # C = np.dot(np.transpose(x_flat), x_flat) / n
 
-    # compute the singular value decomposition
-    U, S, V = np.linalg.svd(C)
+    if eig2ker is not None:
+        # compute the eigenvalues and eigenvectors of the covariance matrix
+        eigen_values, eigen_vectors = np.linalg.eigh(C)
 
-    # compute kernel weights
-    w = svd2ker(U, S, V, epsilon)
+        # sort the eigenvalues in descending order
+        sorted_index = np.argsort(eigen_values)[::-1]
+        V = eigen_values[sorted_index]
+        E = eigen_vectors[:, sorted_index]
+
+        # compute kernel weights
+        w = eig2ker(E[:, :nb_out], V[:nb_out], epsilon)
+    elif svd2ker is not None:
+        # compute the singular value decomposition
+        U, S, V = np.linalg.svd(C)
+
+        # compute kernel weights
+        w = svd2ker(U[:, :nb_out], S[:nb_out], V, epsilon)
+    else:
+        w = np.linalg.inv(C + np.diag(epsilon))
 
     return np.asarray(w, dtype=dtype)
 
 
-def zca(x, shape=None, m=None, epsilon=10e-5, dtype='float32'):
+def zca(x, nb_out=None, shape=None, m=None, epsilon=1e-5, method="eig", dtype='float32'):
     """
     The zero-phase component analysis (ZCA) kernel for whitening (Bell and Sejnowski, 1996).
 
@@ -110,10 +139,13 @@ def zca(x, shape=None, m=None, epsilon=10e-5, dtype='float32'):
     """
     if shape is not None:
         x = x.reshape(tuple(shape))
-    return build_kernel(x, svd2zca, m=m, epsilon=epsilon, dtype=dtype)
+    if method == "svd":
+        return build_kernel(x, nb_out=nb_out, svd2ker=svd2zca, m=m, epsilon=epsilon, dtype=dtype)
+    else:
+        return build_kernel(x, nb_out=nb_out, eig2ker=eig2zca, m=m, epsilon=epsilon, dtype=dtype)
 
 
-def pca(x, shape=None, m=None, epsilon=10e-5, dtype='float32'):
+def pca(x, nb_out=None, shape=None, m=None, epsilon=1e-5, method="eig", dtype='float32'):
     """
     The principal component analysis (PCA) kernel for whitening.
 
@@ -137,10 +169,13 @@ def pca(x, shape=None, m=None, epsilon=10e-5, dtype='float32'):
     """
     if shape is not None:
         x = x.reshape(tuple(shape))
-    return build_kernel(x, svd2pca, m=m, epsilon=epsilon, dtype=dtype)
+    if method == "svd":
+        return build_kernel(x, nb_out=nb_out, svd2ker=svd2pca, m=m, epsilon=epsilon, dtype=dtype)
+    else:
+        return build_kernel(x, nb_out=nb_out, eig2ker=eig2pca, m=m, epsilon=epsilon, dtype=dtype)
 
 
-def whitening(x, w=None, m=None, func=pca, epsilon=10e-5, reshape='first'):
+def whitening(x, nb_out=None, w=None, m=None, func=pca, epsilon=1e-5, reshape='first'):
     """
     Whitens the given data using the given parameters.
     By default it applies ZCA whitening.
@@ -166,6 +201,11 @@ def whitening(x, w=None, m=None, func=pca, epsilon=10e-5, reshape='first'):
         the transformed data.
 
     """
+    if nb_out is None:
+        if w is not None:
+            nb_out = w.shape[1]
+        else:
+            nb_out = x.shape[:1]
     if w is None:
         if 'first' in reshape:
             shape = (x.shape[0], -1)
@@ -173,7 +213,7 @@ def whitening(x, w=None, m=None, func=pca, epsilon=10e-5, reshape='first'):
             shape = (-1, x.shape[-1])
         else:
             shape = None
-        w = func(x, shape, epsilon)
+        w = func(x, nb_out, shape, m, epsilon)
 
     # whiten the input data
     shape = np.shape(x)
@@ -182,4 +222,4 @@ def whitening(x, w=None, m=None, func=pca, epsilon=10e-5, reshape='first'):
     if m is None:
         m = np.mean(x, axis=0) if np.shape(x)[0] > 1 else np.zeros((1, np.shape(w)[0]))
 
-    return np.reshape(np.dot((x - m), w), shape)
+    return np.reshape(np.dot(x - m, w), shape[:-1] + (nb_out,))

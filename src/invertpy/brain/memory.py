@@ -18,7 +18,7 @@ __version__ = "v1.0.0-alpha"
 __maintainer__ = "Evripidis Gkanias"
 
 from .component import Component
-from .synapses import uniform_synapses, sparse_synapses
+from .synapses import uniform_synapses, sparse_synapses, random_synapses
 from .activation import relu, winner_takes_all
 
 from sklearn.metrics import mean_squared_error
@@ -28,23 +28,43 @@ import numpy as np
 
 
 class MemoryComponent(Component, ABC):
-    """
-    Abstract class of a memory component in the insect brain. Memory components are use to store information related to
-    the visual navigation and other tasks. They have been used by numerous works usually as models of the mushroom
-    bodies [1]_, [2]_. Here we keep them more abstracted allowing them to be used as mushroom bodies or not.
+    def __init__(self, *args, nb_hidden=0, **kwargs):
+        """
+        Abstract class of a memory component in the insect brain. Memory components are use to store information related to
+        the visual navigation and other tasks. They have been used by numerous works usually as models of the mushroom
+        bodies [1]_, [2]_. Here we keep them more abstracted allowing them to be used as mushroom bodies or not.
 
-    Notes
-    -----
-    .. [1] Wessnitzer, J., Young, J. M., Armstrong, J. D. & Webb, B. A model of non-elemental olfactory learning in
-       Drosophila. J Comput Neurosci 32, 197–212 (2012).
-    .. [2] Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to Encode
-       Route Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
-    """
+        Parameters
+        ----------
+        nb_hidden : int
+            the number of the hidden units. Default is 0 (no hidden units)
+
+        Notes
+        -----
+        .. [1] Wessnitzer, J., Young, J. M., Armstrong, J. D. & Webb, B. A model of non-elemental olfactory learning in
+           Drosophila. J Comput Neurosci 32, 197–212 (2012).
+        .. [2] Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to Encode
+           Route Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
+        """
+        super().__init__(*args, **kwargs)
+
+        self._nb_hidden = nb_hidden
+
+        self._inp = np.zeros((self.ndim, self.nb_input), dtype=self.dtype)
+        self._out = np.zeros((self.ndim, self.nb_output), dtype=self.dtype)
+        self._hid = np.zeros((self.ndim, self.nb_hidden), dtype=self.dtype)
+
+    def _fprop(self, cs=None, us=None):
+        raise NotImplementedError()
 
     def reset(self):
         """
         By default a memory component is open for updates.
         """
+        self._inp *= 0.
+        self._hid *= 0.
+        self._out *= 0.
+
         self.update = True
 
     def __repr__(self):
@@ -53,9 +73,46 @@ class MemoryComponent(Component, ABC):
         )
 
     @property
+    def r_inp(self):
+        """
+        The responses of the input layer.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._inp
+
+    @property
+    def r_out(self):
+        """
+        The responses of the output layer.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._out
+
+    @property
+    def r_hid(self):
+        """
+        The responses of the hidden layer.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return self._hid
+
+    @property
     def nb_input(self):
         """
         The number of units in the input layer.
+
+        Returns
+        -------
+        int
         """
         return self._nb_input
 
@@ -63,8 +120,23 @@ class MemoryComponent(Component, ABC):
     def nb_output(self):
         """
         The number of units in the output layer.
+
+        Returns
+        -------
+        int
         """
         return self._nb_output
+
+    @property
+    def nb_hidden(self):
+        """
+        The number of units in the hidden layer.
+
+        Returns
+        -------
+        int
+        """
+        return self._nb_hidden
 
     @property
     def free_space(self):
@@ -76,6 +148,29 @@ class MemoryComponent(Component, ABC):
         float
         """
         raise NotImplementedError()
+
+    @property
+    def novelty(self):
+        """
+        The novelty of the last presented input extracted from the memory.
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return np.clip(1 - self._out, 0, 1)
+
+    @property
+    def familiarity(self):
+        """
+        The familiarity to the last presented input extracted from the memory.
+        Typically: 1 - novelty
+
+        Returns
+        -------
+        np.ndarray[float]
+        """
+        return 1 - self.novelty
 
 
 class WillshawNetwork(MemoryComponent):
@@ -124,52 +219,61 @@ class WillshawNetwork(MemoryComponent):
         .. [1] Ardin, P., Peng, F., Mangan, M., Lagogiannis, K. & Webb, B. Using an Insect Mushroom Body Circuit to
            Encode Route Memory in Complex Natural Environments. Plos Comput Biol 12, e1004683 (2016).
         """
+        if nb_sparse is not None:
+            kwargs['nb_hidden'] = nb_sparse
+        else:
+            kwargs.setdefault('nb_hidden', nb_input * 40)
 
         super().__init__(nb_input=nb_input, nb_output=nb_output, learning_rule=learning_rule,
                          eligibility_trace=eligibility_trace, *args, **kwargs)
 
-        self._w_i2s, self._b_s = uniform_synapses(nb_input, nb_sparse, dtype=self.dtype, bias=0.)
+        # nb_in_max = nb_sparse // nb_input + 6
+        max_samples = max(nb_sparse, 10000)
+        # max_repeat = int(np.round(nb_sparse / nb_input / 20))
+        self._w_i2s, self._b_s = sparse_synapses(nb_input, nb_sparse, max_samples=max_samples, dtype=self.dtype, bias=0.)
         self._w_s2o, self._b_o = uniform_synapses(nb_sparse, nb_output, dtype=self.dtype, bias=0.)
         self._w_rest = 1.
 
         self.params.extend([self._w_i2s, self._w_s2o, self._w_rest, self._b_s, self._b_o])
-
-        # reserve space for the responses
-        self._inp = np.zeros(nb_input, dtype=self.dtype)
-        self._spr = np.zeros(nb_sparse, dtype=self.dtype)
-        self._out = np.zeros(nb_output, dtype=self.dtype)
-
-        self._nb_sparse = nb_input * 40 if nb_sparse is None else nb_sparse
-
-        self.f_input = lambda x: np.asarray(x > np.sort(x)[int(self.nb_input * .7)], dtype=self.dtype)
-        self.f_sparse = lambda x: np.asarray(winner_takes_all(x, percentage=self.sparseness), dtype=self.dtype)
-        self.f_output = lambda x: relu(x)
-
+        if sparseness * self.nb_hidden < 1:
+            sparseness = 1 / self.nb_hidden
         self._sparseness = sparseness
+
+        # PN=.0: C=72.99 : 100% on (random), m_fam=<1%
+        # PN=.1: C=73.37 : 90% on, m_fam=<1%
+        # PN=.2: C=74.30 : 80% on, m_fam=<1%
+        # PN=.3: C=75.49 : 70% on, m_fam=1%
+        # PN=.4: C=77.31 : 60% on, m_fam=1.5%
+        # PN=.5: C=79.94 : 50% on, m_fam=1.5%
+        # PN=.6: C=82.50 : 40% on, m_fam=3%
+        # PN=.7: C=85.78 : 30% on, m_fam=10%
+        # PN=.8: C=90.23 : 20% on, m_fam=15%
+        # PN=.9: C=95.55 : 10% on, m_fam=80%
+        # PN=1.: C=72.97 : 0% on (random), m_fam=<1%
+        self.f_input = lambda x: np.asarray(
+            (x.T - x.min(axis=-1)) / (x.max(axis=-1) - x.min(axis=-1)), dtype=self.dtype).T
+        # self.f_input = lambda x: np.asarray(np.greater(x, np.quantile(x, .7)), dtype=self.dtype)  # 30% is on
+        self.f_sparse = lambda x: np.asarray(
+            winner_takes_all(x, percentage=self.sparseness, noise=.01), dtype=self.dtype)
+        self.f_output = lambda x: np.asarray(relu(x), dtype=self.dtype)
 
     def reset(self):
         """
         Resets the synaptic weights and internal responses.
         """
-        self.w_i2s = sparse_synapses(self.nb_input, self.nb_sparse, dtype=self.dtype)
-        self.w_i2s *= self.nb_input / self._w_i2s.sum(axis=1)[:, np.newaxis]
         self.w_s2o = uniform_synapses(self.nb_sparse, self.nb_output, fill_value=1, dtype=self.dtype)
-
-        self._inp *= 0.
-        self._spr *= 0.
-        self._out *= 0.
 
         super().reset()
 
-    def _fprop(self, inp=None, reinforcement=None):
+    def _fprop(self, cs=None, us=None):
         """
         Running the forward propagation.
 
         Parameters
         ----------
-        inp: np.ndarray[float]
+        cs: np.ndarray[float]
             The current input.
-        reinforcement: np.ndarray[float]
+        us: np.ndarray[float]
             The current reinforcement.
 
         Returns
@@ -177,29 +281,33 @@ class WillshawNetwork(MemoryComponent):
         np.ndarray[float]
             the novelty of the input element before the update
         """
-        if inp is None:
-            inp = np.zeros_like(self._inp)
-        if reinforcement is None:
-            reinforcement = 0.
-        inp = np.array(inp, dtype=self.dtype)
-        reinforcement = np.array(reinforcement, dtype=self.dtype)
+        if cs is None:
+            cs = np.zeros_like(self._inp)
+        if us is None:
+            us = 0.
 
-        a_inp = self.f_input(inp)
+        cs = np.array(cs, dtype=self.dtype)
+        us = np.array(us, dtype=self.dtype)
+        if cs.ndim < 2:
+            cs = cs[np.newaxis, ...]
 
-        spr = a_inp @ self.w_i2s + self._b_s
+        a_inp = self.f_input(cs)
+
+        spr = np.dot(a_inp, self.w_i2s) + self._b_s
         a_spr = self.f_sparse(self.update_values(spr, v_pre=self.r_spr, eta=1. - self._lambda))
 
-        out = a_spr @ self.w_s2o + self._b_o
+        out = np.dot(a_spr, self.w_s2o) + self._b_o
         a_out = self.f_output(self.update_values(out, v_pre=self.r_out, eta=1. - self._lambda))
 
         if self.update:
-            self.w_k2m = np.clip(self.update_weights(self.w_s2o, a_spr, a_out, reinforcement, w_rest=self._w_rest), 0, 1)
+            self.w_s2o = np.clip(
+                self.update_weights(self._w_s2o, a_spr, a_out, us, w_rest=self._w_rest), 0, 1)
 
         self._inp = a_inp
-        self._spr = a_spr
+        self._hid = a_spr
         self._out = a_out
 
-        return a_out
+        return self._out
 
     def __repr__(self):
         return "WillshawNetwork(in=%d, sparse=%d, out=%d, eligibility_trace=%.2f, plasticity='%s')" % (
@@ -218,28 +326,18 @@ class WillshawNetwork(MemoryComponent):
         """
         The number of units in the sparse layer.
         """
-        return self._nb_sparse
-
-    @property
-    def r_inp(self):
-        """
-        The input responses.
-        """
-        return self._inp
-
-    @property
-    def r_out(self):
-        """
-        The output responses.
-        """
-        return self._out
+        return self._nb_hidden
 
     @property
     def r_spr(self):
         """
-        The sparse responses.
+        The responses of the sparse layer.
+
+        Returns
+        -------
+        np.ndarray[float]
         """
-        return self._spr
+        return self.r_hid
 
     @property
     def w_i2s(self):
@@ -273,6 +371,56 @@ class WillshawNetwork(MemoryComponent):
         float
         """
         return np.clip(1 - np.absolute(self.w_s2o - self._w_rest), 0, 1).mean()
+
+    @property
+    def novelty(self):
+        z = np.maximum(np.sum(self._hid > 0, axis=1), 1)
+        r_out = (self._out.T / z).T
+        return r_out
+
+
+class Infomax(MemoryComponent):
+
+    def __init__(self, nb_input, learning_rule="infomax", learning_rate=1.1, *args, **kwargs):
+        kwargs.setdefault("nb_hidden", nb_input)
+        # learning_rate *= nb_input
+        super().__init__(nb_input=nb_input, nb_output=1, learning_rule=learning_rule,
+                         repeat_rate=learning_rate, *args, **kwargs)
+
+        self._w_i2h = random_synapses(nb_input, self.nb_hidden, w_min=-.5, w_max=.5, dtype=self.dtype, rng=self.rng)
+        self._w_h2o = uniform_synapses(self.nb_hidden, self.nb_output, fill_value=1. / self.nb_hidden, dtype=self.dtype)
+
+        self.params.extend([self._w_i2h, self._w_h2o])
+
+        self.f_inp = lambda x: np.asarray(x, dtype=self.dtype)
+        self.f_hid = lambda x: np.asarray(np.tanh(x), dtype=self.dtype)
+        self.f_out = lambda x: np.asarray(x / 10, dtype=self.dtype)
+
+    def _fprop(self, cs=None, us=None):
+        a_inp = self.f_inp(cs)
+        hid = np.dot(a_inp, self._w_i2h)
+        a_hid = self.f_hid(hid)
+        a_out = self.f_out(np.dot(np.absolute(hid), self._w_h2o))
+
+        if self.update:
+            self.w_i2h = self.update_weights(self._w_i2h, a_inp, hid, us, w_rest=0)
+
+        self._inp = a_inp
+        self._hid = a_hid
+        self._out = a_out
+
+        return self._out
+
+    def __repr__(self):
+        return f"Infomax(in={self.nb_input}, out={self.nb_output}, free_space={self.free_space * 100:.2f}%)"
+
+    @property
+    def free_space(self):
+        return np.clip(1 - np.absolute(self.w_i2h), 0, 1).mean()
+
+    @property
+    def novelty(self):
+        return self.r_out
 
 
 class PerfectMemory(MemoryComponent):
@@ -324,38 +472,46 @@ class PerfectMemory(MemoryComponent):
 
         super().reset()
 
-    def _fprop(self, inp=None, reinforcement=None):
+    def _fprop(self, cs=None, us=None):
         """
         Calculates the novelty of the input with respect to the stored elements and updates the memory.
 
         Parameters
         ----------
-        inp : np.ndarray[float]
+        cs : np.ndarray[float]
             the input element
-        reinforcement : np.ndarrya[float]
+        us : np.ndarrya[float]
             the reinforcement
 
         Returns
         -------
             the novelty of the input element before the update
         """
-        if inp is None:
-            inp = np.zeros_like(self._database[0])
+        if cs is None:
+            cs = np.zeros_like(self._database[0])
 
-        a_inp = self.f_inp(inp)
+        a_inp = self.f_inp(cs)
 
         if self._write > 0:
             y_true = self.database[:self._write].T
-            y_pred = np.array([a_inp] * self._write).T
+            y_pred = np.vstack([a_inp] * self._write).T
             a_out = self._error_metric(y_true, y_pred, multioutput='raw_values', squared=False).min()
         else:
             a_out = np.zeros(self.nb_output, dtype=self.dtype)
+
+        if np.ndim(a_out) < 1:
+            a_out = np.array([a_out])
+        if np.ndim(a_out) < 2:
+            a_out = a_out[np.newaxis, ...]
+
+        self._inp = a_inp
+        self._out = a_out
 
         if self.update:
             self._database[self._write % self._max_capacity] = a_inp
             self._write += 1
 
-        return a_out
+        return self._out
 
     def __repr__(self):
         return "PerfectMemory(in=%d, out=%d, error=%s)" % (self.nb_input, self.nb_output, self.error_metric)
@@ -392,3 +548,8 @@ class PerfectMemory(MemoryComponent):
         float
         """
         return 1. - self._write / self._max_capacity
+
+    @property
+    def novelty(self):
+        # nov = 1 - np.power(1 - self.r_out, 4096)
+        return self.r_out

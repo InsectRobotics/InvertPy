@@ -47,7 +47,7 @@ def leaky_relu(x, leak=.08, cmin=-np.inf, cmax=np.inf, noise=0., rng=RNG):
     y': np.ndarray
         the output of the activation function
     """
-    lr = np.maximum(x, leak * x) + rng.normal(scale=noise, size=x.shape)
+    lr = np.maximum(x, leak * x) + _get_noise(noise, rng=rng, size=_get_size(x))
     return np.clip(lr, cmin, cmax)
 
 
@@ -137,7 +137,7 @@ def sigmoid(x, cmin=0, cmax=1, noise=0., rng=RNG):
     y': np.ndarray
         the output of the activation function
     """
-    sig = expit(x) + rng.normal(scale=noise, size=len(x))
+    sig = expit(x) + _get_noise(noise, rng=rng, size=_get_size(x))
     return np.clip(sig, cmin, cmax)
 
 
@@ -175,12 +175,11 @@ def softmax(x, tau=1., cmin=0., cmax=1, noise=0., rng=RNG, axis=None):
         The probability of each each of the input values
     """
     y = np.exp(x / tau)
-    y = np.clip(y / np.sum(y, axis=axis), 0., 1e+16) + rng.normal(scale=noise, size=x.shape)
-
+    y = np.clip(y / np.sum(y, axis=axis), 0., 1e+16) + _get_noise(noise, rng=rng, size=_get_size(x))
     return np.clip(y, cmin, cmax)
 
 
-def winner_takes_all(x, tau=None, percentage=.05, cmin=0., cmax=1., noise=0., rng=RNG):
+def winner_takes_all(x, tau=None, percentage=.05, normalise=False, cmin=0., cmax=1., noise=0., rng=RNG):
     """
     The Winner Takes All (WTA) algorithm can be used to force sparse coding.
 
@@ -204,6 +203,8 @@ def winner_takes_all(x, tau=None, percentage=.05, cmin=0., cmax=1., noise=0., rn
         percentage approach is applied.
     percentage: float, optional
         the percentage of the active neurons that we want to keep.
+    normalise: bool, optional
+        if True, then the output will sum to one.
     cmin: float, optional
         the minimum constant
     cmax: float, optional
@@ -217,11 +218,33 @@ def winner_takes_all(x, tau=None, percentage=.05, cmin=0., cmax=1., noise=0., rn
     y': np.ndarray
         The output of the activation function.
     """
-    n = x.shape
+    y = x + _get_noise(noise, rng=rng, size=_get_size(x))
     if tau is None:
-        k = int(percentage * n[-1])
-        y = np.asarray(np.greater(x.T, np.sort(x)[..., ::-1][..., k]).T, dtype=x.dtype)
+        y = np.asarray(np.greater(y.T, np.quantile(y, 1 - percentage, axis=-1)).T, dtype=x.dtype)
     else:
-        y = np.asarray(np.greater_equal(x, tau), dtype=x.dtype)
+        y = np.asarray(np.greater_equal(y, tau), dtype=x.dtype)
 
-    return np.clip(y + rng.normal(scale=noise, size=n), cmin, cmax)
+    if normalise:
+        y /= (y.sum() + np.finfo(float).eps)
+
+    return np.clip(y, cmin, cmax)
+
+
+def hardmax(x, cmin=0., cmax=1., noise=0., rng=RNG, axis=None):
+    y = x + _get_noise(noise, rng=rng, size=_get_size(x))
+    y = np.eye(y.shape[-1], dtype=x.dtype)[np.argmax(y, axis=axis)]
+
+    return np.clip(y, cmin, cmax)
+
+
+def _get_noise(eta, size=None, rng=RNG):
+    return rng.uniform(low=-eta, high=eta, size=size)
+
+
+def _get_size(x):
+    if hasattr(x, "shape"):
+        return x.shape
+    elif hasattr(x, "len"):
+        return len(x)
+    else:
+        return None

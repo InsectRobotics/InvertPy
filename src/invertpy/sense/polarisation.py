@@ -62,7 +62,7 @@ class PolarisationSensor(CompoundEye):
         else:
             nb_samples = None
         if nb_samples is not None:
-            omm_sph = generate_rings(nb_samples=[4, 8, 12, 16, 20], fov=field_of_view, degrees=degrees)[..., :2]
+            omm_sph = generate_rings(nb_samples=nb_samples, fov=field_of_view, degrees=degrees)[..., :2]
             omm_euler = np.hstack([omm_sph, np.full((omm_sph.shape[0], 1), np.pi / 2)])
             kwargs.setdefault('omm_ori', R.from_euler('ZYX', omm_euler, degrees=False))
         kwargs.setdefault('omm_rho', np.deg2rad(5.4))
@@ -78,13 +78,14 @@ class PolarisationSensor(CompoundEye):
         r = super()._sense(sky=sky, scene=scene)
 
         # transform the photoreceptor signals to POL-neuron responses.
-        return np.asarray(photoreceptor2pol(r, ori=self.omm_ori, dtype=self.dtype).reshape((-1, 1)), dtype=self.dtype)
+        return np.asarray(photoreceptor2pol(r, ori=self.omm_ori, nb_receptors=self._phot_angle,
+                                            dtype=self.dtype).reshape((-1, 1)), dtype=self.dtype)
 
     def __repr__(self):
-        return ("PolarisationSensor(ommatidia=%d, FOV=%.0f, responses=(%d, %d), "
+        return ("PolarisationSensor(ommatidia=%d, FOV=%.0f, responses=(%d, %d), pr_angles=%d, "
                 "pos=(%.2f, %.2f, %.2f), ori=(%.2f, %.2f, %.2f), name='%s')") % (
             self.nb_ommatidia, np.rad2deg(self.field_of_view), self._nb_output[0], self._nb_output[1],
-            self.x, self.y, self.z, self.yaw_deg, self.pitch_deg, self.roll_deg, self.name
+            len(self._phot_angle), self.x, self.y, self.z, self.yaw_deg, self.pitch_deg, self.roll_deg, self.name
         )
 
     @property
