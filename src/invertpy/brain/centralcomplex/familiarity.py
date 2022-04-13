@@ -164,7 +164,7 @@ class FamiliarityCX(StoneCX):
         p_nod = self._nod_momentum.copy() + self.rng.rand(*self._nod_momentum.shape) * 0.001
 
         # the current positive - negative MBON response
-        c_mbon = mbon[..., 0::2] - mbon[..., 1::2]
+        c_mbon = np.power(mbon[..., 0::2], 8) - np.power(mbon[..., 1::2], 8)
 
         # the previous positive - negative MBON response
         p_mbon = self.memory.r_mbon[..., 0::2] - self.memory.r_mbon[..., 1::2]
