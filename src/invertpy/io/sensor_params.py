@@ -52,8 +52,11 @@ def save_eye2csv(eye, filename=None):
     """
     if filename is None:
         filename = eye.name
-    filename = filename.replace('.csv', '')
-    fall = os.path.join(__data_dir__, 'eyes', filename + '.csv')
+    if not os.path.exists(os.path.dirname(filename)):
+        filename = filename.replace('.csv', '')
+        fall = os.path.join(__data_dir__, 'eyes', filename + '.csv')
+    else:
+        fall = filename
     xyz = eye.omm_xyz
     q = eye.omm_ori.as_quat()
     rho = np.rad2deg(eye.omm_rho.reshape((-1, 1)))
@@ -300,3 +303,16 @@ def load_ommatidia_irgbu(filename):
     fall = os.path.join(__data_dir__, 'eyes', filename + '.csv')
     data = np.genfromtxt(fall, delimiter=',')
     return data[..., 10:15]
+
+
+def reset_data_directory(data_dir):
+    """
+    Sets up the default directory of the data.
+
+    Parameters
+    ----------
+    data_dir : str
+        the new directory path.
+    """
+    global __data_dir__
+    __data_dir__ = data_dir
