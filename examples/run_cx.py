@@ -1,13 +1,13 @@
-#! /usr/bin/env python
+# # ! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from invertpy.brain.centralcomplex import BeeCentralComplex
+from invertpy.brain.centralcomplex.stone import StoneCX
 
 import sys
 
 
 def main(*args):
-    print(BeeCentralComplex())
+    print(StoneCX())
 
 
 if __name__ == '__main__':
