@@ -75,6 +75,10 @@ class StoneCX(CentralComplexBase):
         if self.__class__ == StoneCX:
             self.reset()
 
+    def __repr__(self):
+        return f"StoneCX(CL1={self.nb_cl1}, TB1={self.nb_tb1}, CPU4={self.nb_cpu4}, CPU1={self.nb_cpu1}, " \
+               f"TN1={self.nb_tn1}, TN2={self.nb_tn2})"
+
     def _fprop(self, phi, flow, tl2=None, cl1=None):
         a_tb1 = self.compass(phi=phi, tl2=tl2, cl1=cl1)
         a_tn1 = self.flow2tn1(flow)

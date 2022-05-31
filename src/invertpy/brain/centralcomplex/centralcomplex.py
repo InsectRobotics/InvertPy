@@ -76,6 +76,9 @@ class CentralComplexBase(Component, ABC):
         """
         self.__layers[layer_name] = layer
 
+    def __repr__(self):
+        return f"CentralComplex(compass={self.nb_compass}, steering={self.nb_steering})"
+
     @property
     def w_steering2motor(self):
         return self._w_s2o
