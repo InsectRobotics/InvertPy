@@ -147,7 +147,7 @@ class CompoundEye(Sensor):
         nb_samples = 6
 
         # create the 6 Gaussian samples for each ommatidium
-        omm_ori_gau = [R.from_euler('Z', np.zeros((nb_omm, 1), dtype=self.dtype)) for _ in range(6)]
+        omm_ori_gau = [R.from_euler('Z', np.zeros((nb_omm, 1), dtype=self.dtype)) for _ in range(nb_samples)]
         for i in range(nb_samples):
             ori_p = R.from_euler(
                 'XY', np.vstack([np.full_like(self._omm_rho, i*2*np.pi/nb_samples), self._omm_rho/2]).T)

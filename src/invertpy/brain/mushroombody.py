@@ -352,6 +352,10 @@ class MushroomBody(MemoryComponent):
             self.w_k2m = np.clip(self.update_weights(self.w_k2m, a_kc, a_mbon, D, w_rest=self.w_rest),
                                  0, self._maximum_weight)
 
+        # print(a_kc)
+        # print(a_dan)
+        # print(a_mbon)
+
         return a_kc, a_apl, a_dan, a_mbon
 
     def __repr__(self):
@@ -373,8 +377,8 @@ class MushroomBody(MemoryComponent):
 
     @property
     def novelty(self):
-        fam_0 = np.maximum(self.r_mbon - np.roll(self.r_mbon, axis=-1, shift=-1) / 2, 0)
-        fam_1 = np.maximum(self.r_mbon - np.roll(self.r_mbon, axis=-1, shift=1) / 2, 0)
+        fam_0 = np.maximum((np.roll(self.r_mbon, axis=-1, shift=-1) - self.r_mbon) / 2, 0)
+        fam_1 = np.maximum((np.roll(self.r_mbon, axis=-1, shift=1) - self.r_mbon) / 2, 0)
         fam = fam_0 + fam_1
         return np.clip(1 - fam, 0, 1)
 
@@ -673,7 +677,7 @@ class IncentiveCircuit(MushroomBody):
         """
         The Incentive Circuit is a representative compartment of the Mushroom Body that encodes the memory dynamics of
         model in small scale and it contains MBON-DAN and MBON-MBON feedback connections. This model was first
-        presented in Gkanias et al (2021).
+        presented in Gkanias et al. (2022).
 
         Parameters
         ----------
@@ -699,6 +703,7 @@ class IncentiveCircuit(MushroomBody):
             the charging (and discharging) speed of the long-term memory MBONs.
         """
         kwargs.setdefault('nb_repeats', 4)
+        kwargs.setdefault('repeat_rate', 1)
 
         self._cs_magnitude = cs_magnitude
         self._us_magnitude = us_magnitude
@@ -814,6 +819,17 @@ class IncentiveCircuit(MushroomBody):
         the charging (and discharging) speed of the long-term memory MBONs.
         """
         return self._memory_charging_speed
+
+    @property
+    def novelty(self):
+        r_s = self.r_mbon[0, :, self._pss:self._pse]
+        r_r = self.r_mbon[0, :, self._prs:self._pre]
+        r_m = self.r_mbon[0, :, self._pms:self._pme]
+
+        fam_s = r_s[:, 0] - np.mean(r_s[:, 1:], axis=1)
+        fam_r = r_r[:, 0] - np.mean(r_r[:, 1:], axis=1)
+        fam_m = r_m[:, 0] - np.mean(r_m[:, 1:], axis=1)
+        return np.clip(1 - (fam_s + fam_r + fam_m) / 3, 0, 1)
 
     def __repr__(self):
         return "IncentiveCircuit(CS=%d, US=%d, KC=%d, DAN=%d, MBON=%d, LTM_charging_speed=%.2f, plasticity='%s')" % (
@@ -1076,7 +1092,7 @@ class VisualIncentiveCircuit(IncentiveCircuit):
         prs, pre = self._prs, self._pre
         pms, pme = self._pms, self._pme
 
-        self.b_d[pds:pde] = -0.5
+        self.b_d[pds:pde] = 0.
         self.b_d[pcs:pce] = 0.
         self.b_d[pfs:pfe] = 0.
         self.b_m[pss:pse] = -0.
@@ -1145,9 +1161,9 @@ class VisualIncentiveCircuit(IncentiveCircuit):
         #     [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
         #     dtype=self.dtype) * (-1.)
         # v = 1 / (pre - prs - 1)
-        v = 1
-        self.w_m2d[prs:pre, pcs:pce] += pattern_synapses(diagonal_synapses((pre-prs) // 2, (pce-pcs) // 2),
-                                                         opposing_synapses(2, 2, fill_value=-v), dtype=self.dtype)
+        # v = 1
+        # self.w_m2d[prs:pre, pcs:pce] += pattern_synapses(diagonal_synapses((pre-prs) // 2, (pce-pcs) // 2),
+        #                                                  opposing_synapses(2, 2, fill_value=-v), dtype=self.dtype)
 
         # # Charging DANs inhibit other charging DANs
         # self.w_d2d[pcs:pce, pcs:pce] += diagonal_synapses(pce-pcs, pce-pcs, fill_value=1., dtype=self.dtype) - 1
@@ -1186,9 +1202,9 @@ class VisualIncentiveCircuit(IncentiveCircuit):
         #     [[1.] + [0.] * (self.nb_mbon // 3 - 1)] * (self.nb_dan // 3 - 1),
         #     dtype=self.dtype) * (-1.)
         # v = 1 / (pme - pfs - 1)
-        v = 1
-        self.w_m2d[pms:pme, pfs:pfe] += pattern_synapses(diagonal_synapses((pme-pms) // 2, (pfe-pfs) // 2),
-                                                         opposing_synapses(2, 2, fill_value=-v), dtype=self.dtype)
+        # v = 1
+        # self.w_m2d[pms:pme, pfs:pfe] += pattern_synapses(diagonal_synapses((pme-pms) // 2, (pfe-pfs) // 2),
+        #                                                  opposing_synapses(2, 2, fill_value=-v), dtype=self.dtype)
 
         # Forgetting DANs depress their opposite long-term memory MBONs
         # self.w_d2m[pfs:pfe, pms:pme] += np.array(
