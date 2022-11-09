@@ -47,7 +47,7 @@ class CentralComplexBase(Component, ABC):
 
     def reset(self):
         for name, layer in self.__layers.items():
-            layer.reset()
+            layer.initialise()
 
         self.update = True
 
