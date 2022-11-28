@@ -42,7 +42,7 @@ class CelestialCompass(Compass):
     def __init__(self, nb_pol, loc_ori, nb_sol=8, nb_tcl=None, sigma=13, shift=40, dt=2./60, degrees=True,
                  integrated=False, has_pol=True, has_sun=True, has_circadian=False, nb_receptors=2, *args, **kwargs):
         """
-        The Celestial Compass integrated a polarisation compass and a sky gradient compass presented in [1]_.
+        The Celestial Compass integrated a polarisation compass and a skygui gradient compass presented in [1]_.
 
         Parameters
         ----------
@@ -459,7 +459,7 @@ class CelestialCompass(Compass):
 class PolarisationCompass(CelestialCompass):
     def __init__(self, *args, **kwargs):
         """
-        The Polarisation Compass is a special case of the Celestial Compass that does not include a sky gradient
+        The Polarisation Compass is a special case of the Celestial Compass that does not include a skygui gradient
         compass.
         """
         kwargs.setdefault('has_sun', False)
