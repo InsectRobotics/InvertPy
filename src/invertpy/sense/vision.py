@@ -184,8 +184,8 @@ class CompoundEye(Sensor):
 
         if sky is not None:
             # # the brightness of the environment can be calculated given the sun position
-            # br = np.clip(np.sin(skygui.theta_s), 0.1, 1)
-            # get the skygui contribution
+            # br = np.clip(np.sin(skylight_gui.theta_s), 0.1, 1)
+            # get the skylight_gui contribution
             y[:], p[:], a[:] = sky(omm_ori_glob, irgbu=w_c, noise=self.noise, rng=self.rng)
 
         if scene is not None:
@@ -198,7 +198,7 @@ class CompoundEye(Sensor):
                 w_c = np.vstack([w_c] * (rgb.shape[0] // w_c.shape[0]))
             c[:] = np.sum(rgb * w_c[..., 1:4], axis=1)
 
-        # add the contribution of the scene to the input from the skygui
+        # add the contribution of the scene to the input from the sky
         if np.all(np.isnan(y)) or np.all(~np.isnan(c)):
             max_brightness = 1.
         else:
