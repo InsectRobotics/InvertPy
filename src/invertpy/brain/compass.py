@@ -2,7 +2,7 @@
 The Compass models of the insect brain.
 
 References:
-    .. [1] Gkanias, E., Risse, B., Mangan, M. & Webb, B. From skylight input to behavioural output: a computational model
+    .. [1] Gkanias, E., Risse, B., Mangan, M. & Webb, B. From skylight_gui input to behavioural output: a computational model
        of the insect polarised light compass. PLoS Comput Biol 15, e1007123 (2019).
 """
 
@@ -42,7 +42,7 @@ class CelestialCompass(Compass):
     def __init__(self, nb_pol, loc_ori, nb_sol=8, nb_tcl=None, sigma=13, shift=40, dt=2./60, degrees=True,
                  integrated=False, has_pol=True, has_sun=True, has_circadian=False, nb_receptors=2, *args, **kwargs):
         """
-        The Celestial Compass integrated a polarisation compass and a sky gradient compass presented in [1]_.
+        The Celestial Compass integrated a polarisation compass and a skylight_gui gradient compass presented in [1]_.
 
         Parameters
         ----------
@@ -76,7 +76,7 @@ class CelestialCompass(Compass):
 
         Notes
         -----
-        .. [1] Gkanias, E., Risse, B., Mangan, M. & Webb, B. From skylight input to behavioural output: a computational model
+        .. [1] Gkanias, E., Risse, B., Mangan, M. & Webb, B. From skylight_gui input to behavioural output: a computational model
            of the insect polarised light compass. PLoS Comput Biol 15, e1007123 (2019).
         """
         super().__init__(nb_pol, nb_tcl, *args, **kwargs)
@@ -459,7 +459,7 @@ class CelestialCompass(Compass):
 class PolarisationCompass(CelestialCompass):
     def __init__(self, *args, **kwargs):
         """
-        The Polarisation Compass is a special case of the Celestial Compass that does not include a sky gradient
+        The Polarisation Compass is a special case of the Celestial Compass that does not include a skylight_gui gradient
         compass.
         """
         kwargs.setdefault('has_sun', False)

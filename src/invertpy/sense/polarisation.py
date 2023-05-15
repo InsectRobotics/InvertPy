@@ -2,7 +2,7 @@
 The Polarisation Sensor package that implements the sensor design and properties from [1]_.
 
 References:
-    .. [1] Gkanias, E., Risse, B., Mangan, M. & Webb, B. From skylight input to behavioural output: a computational model
+    .. [1] Gkanias, E., Risse, B., Mangan, M. & Webb, B. From skylight_gui input to behavioural output: a computational model
        of the insect polarised light compass. PLoS Comput Biol 15, e1007123 (2019).
 """
 
@@ -42,7 +42,7 @@ class PolarisationSensor(CompoundEye):
 
         Notes
         -----
-        .. [1] Gkanias, E., Risse, B., Mangan, M. & Webb, B. From skylight input to behavioural output: a computational
+        .. [1] Gkanias, E., Risse, B., Mangan, M. & Webb, B. From skylight_gui input to behavioural output: a computational
            model of the insect polarised light compass. PLoS Comput Biol 15, e1007123 (2019).
 
         """

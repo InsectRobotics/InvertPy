@@ -56,7 +56,36 @@ class EllipsoidBodyLayer(CentralComplexLayer):
         self._mix = mix
 
     def reset(self):
-        self.w_epg2delta7 = diagonal_synapses(self.nb_cl1, self.nb_tb1, fill_value=1, tile=True, dtype=self.dtype)
+        # Original Stone model:
+        # self.w_epg2delta7 = diagonal_synapses(self.nb_cl1, self.nb_tb1, fill_value=1, tile=True, dtype=self.dtype)
+
+        # single bump---positive/negative connections
+        # self.w_epg2delta7 = (np.linspace(0, 2 * np.pi, self.nb_epg, endpoint=False)[:, None] -
+        #                      np.linspace(0, 2 * np.pi, self.nb_tb1, endpoint=False)[None, :])
+        # self.w_epg2delta7 = np.cos(self.w_epg2delta7) ** 3
+
+        # single bump---PB coordinates
+        self.w_epg2delta7 = (np.linspace(0, 2 * np.pi, self.nb_epg, endpoint=False)[:, None] -
+                             np.linspace(0, 2 * np.pi, self.nb_tb1, endpoint=False)[None, :])
+        self.w_epg2delta7 = .27 * (np.cos(self.w_epg2delta7) + 1)
+
+        self.w_epg2delta7[abs(self.w_epg2delta7) < 0.5] = 0
+        self.w_epg2delta7 /= np.sum(abs(self.w_epg2delta7[:, 0])) / 2
+
+        # PLOT THE WEIGHTS
+        # ----------------
+        #
+        # import matplotlib.pyplot as plt
+        #
+        # w_show = np.vstack([self.w_epg2delta7[0::2], self.w_epg2delta7[1::2]])  # CBL coordinates
+        # plt.figure("w_epg2delta7")
+        # plt.subplot(121)
+        # plt.imshow(self.w_epg2delta7, cmap='coolwarm', vmin=-1, vmax=1)
+        # plt.subplot(122)
+        # plt.imshow(w_show, cmap='coolwarm', vmin=-1, vmax=1)
+        # plt.colorbar()
+        # plt.show()
+
         self.w_delta72delta7 = sinusoidal_synapses(self.nb_tb1, self.nb_tb1, fill_value=1, dtype=self.dtype) - 1
 
         self.r_epg = np.zeros(self.nb_epg, dtype=self.dtype)
@@ -216,7 +245,8 @@ class SimpleCompass(EllipsoidBodyLayer):
 
         self._tl2 = np.zeros(nb_tl2, dtype=self.dtype)
 
-        self.tl2_prefs = np.tile(np.linspace(0, 2 * np.pi, self.nb_tb1, endpoint=False), 2)
+        self.tl2_prefs = np.linspace(0, 2 * np.pi, self.nb_tl2, endpoint=False)
+        # self.tl2_prefs = np.tile(np.linspace(0, 2 * np.pi, self.nb_tb1, endpoint=False), 2)
 
         self.f_tl2 = lambda v: sigmoid(v * self._tl2_slope - self._tl2_b, noise=self._noise, rng=self.rng)
 

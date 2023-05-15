@@ -147,7 +147,7 @@ class CompoundEye(Sensor):
         nb_samples = 6
 
         # create the 6 Gaussian samples for each ommatidium
-        omm_ori_gau = [R.from_euler('Z', np.zeros((nb_omm, 1), dtype=self.dtype)) for _ in range(6)]
+        omm_ori_gau = [R.from_euler('Z', np.zeros((nb_omm, 1), dtype=self.dtype)) for _ in range(nb_samples)]
         for i in range(nb_samples):
             ori_p = R.from_euler(
                 'XY', np.vstack([np.full_like(self._omm_rho, i*2*np.pi/nb_samples), self._omm_rho/2]).T)
@@ -184,8 +184,8 @@ class CompoundEye(Sensor):
 
         if sky is not None:
             # # the brightness of the environment can be calculated given the sun position
-            # br = np.clip(np.sin(sky.theta_s), 0.1, 1)
-            # get the sky contribution
+            # br = np.clip(np.sin(skylight_gui.theta_s), 0.1, 1)
+            # get the skylight_gui contribution
             y[:], p[:], a[:] = sky(omm_ori_glob, irgbu=w_c, noise=self.noise, rng=self.rng)
 
         if scene is not None:

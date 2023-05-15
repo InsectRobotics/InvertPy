@@ -29,7 +29,7 @@ import numpy as np
 __init_dir__ = set(dir()) | {'__init_dir__'}
 
 
-def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1., binary_pre=True, rho=1e-01):
+def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1., binary_pre=True, rho=1e-04):
     """
     The dopaminergic learning rule introduced in Gkanias et al (2021). Reinforcement here is assumed to be the
     dopaminergic factor.
@@ -71,9 +71,12 @@ def dopaminergic(w, r_pre, r_post, rein, learning_rate=1., w_rest=1., binary_pre
     """
     if rein.ndim > 1:
         dop_fact = rein[:, np.newaxis, ...]
-    else:
+    elif rein.ndim != r_pre.ndim:
         dop_fact = rein[np.newaxis, ...]
-    r_pre = r_pre[..., np.newaxis]
+    else:
+        dop_fact = rein
+    if r_pre.ndim < 2 or r_pre.shape[1] != r_post.shape[0]:
+        r_pre = r_pre[..., np.newaxis]
 
     # transform the pre-synaptic responses to binary: 1 if r_pre > 0, 0 otherwise
     if binary_pre:
