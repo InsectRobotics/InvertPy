@@ -8,6 +8,8 @@ __license__ = "MIT"
 __version__ = "v1.1-alpha"
 __maintainer__ = "Evripidis Gkanias"
 
+import numpy as np
+
 from invertpy.brain.synapses import *
 from invertpy.brain.activation import sigmoid, relu
 
@@ -253,13 +255,13 @@ class PathIntegratorLayer(FanShapedBodyLayer):
 
         mem = mem_tn1 * mem_tb1 - mem_tn2
 
-        cpu4_mem = self.__mem + self._gain * mem
+        if self.update:
+            cpu4_mem = self.mem_update(mem)
+        else:
+            cpu4_mem = mem
 
         # this creates a problem with vector memories
         # cpu4_mem = np.clip(cpu4_mem, 0., 1.)
-
-        if self.update:
-            self.__mem[:] = cpu4_mem
 
         self.r_tb1 = tb1
         self.r_tn1 = tn1
@@ -267,6 +269,10 @@ class PathIntegratorLayer(FanShapedBodyLayer):
         self.r_cpu4 = a_cpu4 = self.f_cpu4(cpu4_mem)
 
         return a_cpu4
+
+    def mem_update(self, mem):
+        self.__mem[:] = self.__mem + self.gain * mem
+        return self.__mem
 
     def reset_integrator(self):
         self.__mem[:] = .5
@@ -499,8 +505,6 @@ class FamiliarityIntegratorLayer(PathIntegratorLayer):
 
         # mem_pre = self.__mem_vis - 0.5
         mem = mem_tn1 * mem_tb1 - mem_tn2
-
-        # print(self.gain, mem)
 
         # vis_mem = 0.5 + 0.5 * mem_pre + self._gain * mem * mem_mbon
         # vis_mem = self.__mem_vis + 2 * self._gain * mem * mem_mbon

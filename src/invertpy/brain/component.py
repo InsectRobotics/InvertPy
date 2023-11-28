@@ -57,12 +57,14 @@ class Component(object):
             on the previous ones.
         noise: float, optional
             The noise introduced in the responses of the component.
-        rng: np.random.RandomState
+        rng: np.random.RandomState, int
             An instance of the numpy.random.RandomState that will be used in order to generate random patterns.
         dtype: np.dtype, optional
             The type of the values used in this component.
         """
         self.dtype = dtype
+        if isinstance(rng, int):
+            rng = np.random.RandomState(rng)
         self.rng = rng
 
         self.params = []

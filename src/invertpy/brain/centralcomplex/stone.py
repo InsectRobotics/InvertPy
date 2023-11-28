@@ -63,9 +63,9 @@ class StoneCX(CentralComplexBase):
         kwargs.setdefault('learning_rule', None)
         super().__init__(*args, **kwargs)
 
-        self["compass"] = SimpleCompass(nb_tl2=nb_tl2, nb_cl1=nb_cl1, nb_tb1=nb_tb1)
-        self["memory"] = PathIntegratorLayer(nb_tb1=nb_tb1, nb_cpu4=nb_cpu4, nb_tn1=nb_tn1, nb_tn2=nb_tn2, gain=gain)
-        self["steering"] = PontineSteering(nb_tb1=nb_tb1, nb_cpu4=nb_cpu4, nb_cpu1=nb_cpu1a+nb_cpu1b)
+        self["compass"] = SimpleCompass(nb_tl2=nb_tl2, nb_cl1=nb_cl1, nb_tb1=nb_tb1, noise=self._noise, rng=self.rng)
+        self["memory"] = PathIntegratorLayer(nb_tb1=nb_tb1, nb_cpu4=nb_cpu4, nb_tn1=nb_tn1, nb_tn2=nb_tn2, gain=gain, noise=self._noise, rng=self.rng)
+        self["steering"] = PontineSteering(nb_tb1=nb_tb1, nb_cpu4=nb_cpu4, nb_cpu1=nb_cpu1a+nb_cpu1b, noise=self._noise, rng=self.rng)
 
         self._tn_prefs = tn_prefs
         self._smoothed_flow = 0.
