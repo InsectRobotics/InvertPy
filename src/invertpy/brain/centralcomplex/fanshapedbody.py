@@ -222,6 +222,7 @@ class PathIntegratorLayer(FanShapedBodyLayer):
 
         self._gain = gain
 
+        self.m_cpu4 = np.zeros(self.nb_fbn, dtype=self.dtype)
         self.__mem = .5 * np.ones(self.nb_fbn, dtype=self.dtype)  # cpu4 memory
 
     def reset(self):
@@ -254,6 +255,7 @@ class PathIntegratorLayer(FanShapedBodyLayer):
         mem_tn2 = 0.25 * tn2.dot(self.w_tn22cpu4)
 
         mem = mem_tn1 * mem_tb1 - mem_tn2
+        self.m_cpu4 = self.f_fbn(mem * 500)
 
         if self.update:
             cpu4_mem = self.mem_update(mem)

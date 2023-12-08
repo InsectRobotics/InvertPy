@@ -3,6 +3,10 @@ import invertpy.brain.centralcomplex.fanshapedbody as fb
 import loguru as lg
 import numpy as np
 
+AVOGADRO_CONSTANT = 6.02214076e+23  # /mol
+PLANK_CONSTANT = 6.62597915e-34  # J s
+SPEED_OF_LIGHT = 299792458  # m/s
+
 
 class PathIntegrationDyeLayer(fb.PathIntegratorLayer):
     """
@@ -31,7 +35,7 @@ class PathIntegrationDyeLayer(fb.PathIntegratorLayer):
     """
 
     def __init__(self, *args, epsilon=1.0, length=10e-04, T_half=1.0, k=None, beta=0, phi=0, c_tot=0.3,
-                 # volume=1e-18, wavelength=750, W_max=1e-15,  # unused parameters
+                 volume=None, wavelength=None, w_max=None,
                  parameter_noise=0.0, model_transmittance=True, mem_initial=None, **kwargs):
         """
 
@@ -53,7 +57,7 @@ class PathIntegrationDyeLayer(fb.PathIntegratorLayer):
             the total concentration of dye molecules per unit.
         volume
         wavelength
-        W_max
+        w_max
         parameter_noise: float
             the noise to add to the parameters.
         model_transmittance: bool
@@ -74,8 +78,11 @@ class PathIntegrationDyeLayer(fb.PathIntegratorLayer):
         self.length = noisify_column_parameter(length, parameter_noise, self.nb_fbn)
         self.k = noisify_column_parameter(np.log(2) / T_half if k is None else k, parameter_noise, self.nb_fbn)
 
-        # E = 6.62697915 * 1e-34 * 299792458 / (wavelength * 1e-9)
-        # self.k_phi = W_max / (E * volume * 6.02214076*1e23)
+        if wavelength is None or volume is None or w_max is None:
+            self.k_phi = 1.
+        else:
+            E = PLANK_CONSTANT * SPEED_OF_LIGHT / wavelength  # (J) energy of the photon
+            self.k_phi = w_max / (E * volume * AVOGADRO_CONSTANT)  # M/s
         self.phi = noisify_column_parameter(phi, parameter_noise, self.nb_fbn)
         self.c_tot = noisify_column_parameter(c_tot, parameter_noise, self.nb_fbn)
 
@@ -89,6 +96,7 @@ class PathIntegrationDyeLayer(fb.PathIntegratorLayer):
         self._f_fbn_inter = super().f_cpu4
         self.f_fbn = lambda x: x
         self.update = True
+        self.m_cpu4 = 0.
 
     def transmittance(self, c):
         """
@@ -132,7 +140,7 @@ class PathIntegrationDyeLayer(fb.PathIntegratorLayer):
 
     def mem_update(self, mem, dt=1.):
 
-        mem_int = self._f_fbn_inter(mem * 500)  # cpu4 activity
+        self.m_cpu4 = mem_int = self._f_fbn_inter(mem * 500)  # cpu4 activity
         mem = np.clip(mem_int * self.gain + self.beta, 0, 1)
 
         self.last_c = np.clip(self.last_c + self.dcdt(mem)(0, self.last_c) * dt, 0, 1)
